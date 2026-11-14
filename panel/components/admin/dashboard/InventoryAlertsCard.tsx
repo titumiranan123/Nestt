@@ -1,0 +1,8 @@
+import { ArrowRight } from "lucide-react";
+
+const card = "min-w-0 rounded-lg border border-gray-200 bg-white";
+
+export function InventoryAlertsCard() {
+  const items = [{ name: "Oakline side table", sku: "NT-TB-026", stock: 2 }, { name: "Marlow dining chair", sku: "NT-CH-097", stock: 3 }, { name: "Arlo accent stool", sku: "NT-ST-012", stock: 4 }, { name: "Luma bedside pair", sku: "NT-BD-018", stock: 5 }];
+  return <article className={`${card} border-t-[3px] border-t-brand p-4 sm:p-5`}><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-brand">Needs attention</p><h2 className="mt-1 text-base font-bold text-brand-dark">Inventory alerts</h2><p className="mt-1 text-sm text-gray-500">Products that need a restock</p></div><span className="grid size-8 place-items-center rounded-lg bg-brand text-xs font-bold text-white shadow-sm">12</span></div><div className="mt-3">{items.map((item) => <div className="flex items-center gap-3 border-b border-gray-100 py-3 last:border-0" key={item.sku}><div className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-soft"><span className="h-6 w-5 rounded border border-brand/50 bg-brand/25"/></div><div className="min-w-0 flex-1"><strong className="block truncate text-sm font-medium text-gray-800">{item.name}</strong><small className="mt-0.5 block text-xs text-gray-500">SKU: {item.sku}</small></div><span className="text-xs font-bold text-brand">{item.stock} left</span></div>)}</div><button className="ml-auto mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand hover:text-brand-dark">View inventory <ArrowRight size={15}/></button></article>;
+}

@@ -1,0 +1,7 @@
+import { Search } from "lucide-react";
+
+const input = "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-brand focus:ring-4 focus:ring-brand/10";
+
+export function CouponSearchFilters({ query, filter, count, onQuery, onFilter }: { query: string; filter: "all" | "active" | "inactive"; count: number; onQuery: (value: string) => void; onFilter: (value: "all" | "active" | "inactive") => void }) {
+  return <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-base font-bold text-gray-950">Coupon list</h2><p className="mt-1 text-xs text-gray-500">{count} coupons matched your filters.</p></div><div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_auto]"><label className="flex h-10 items-center gap-2 rounded-lg border border-gray-200 px-3 text-gray-400"><Search size={15}/><input className="min-w-0 flex-1 border-0 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search by coupon code"/></label><div className="flex rounded-lg border border-gray-200 p-1">{(["all", "active", "inactive"] as const).map((value) => <button key={value} onClick={() => onFilter(value)} className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition ${filter === value ? "bg-brand text-white" : "text-gray-500 hover:bg-gray-50"}`}>{value}</button>)}</div></div></div>;
+}

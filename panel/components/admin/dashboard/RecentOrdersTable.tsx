@@ -1,0 +1,13 @@
+import Link from "next/link";
+
+import { demoOrders, money, type DemoOrder } from "@/lib/demo-admin-data";
+
+import AdminIcon from "@/components/admin/AdminIcon";
+
+import { OrderStatusPill } from "@/components/admin/orders/OrderStatusPill";
+
+const card = "min-w-0 rounded-lg border border-gray-200 bg-white";
+
+export function RecentOrdersTable({ orders = demoOrders.slice(0, 5) }: { orders?: DemoOrder[] }) {
+  return <section className={`${card} overflow-hidden border-t-[3px] border-t-brand`}><div className="flex items-center justify-between gap-3 bg-brand-soft/35 px-4 py-4 sm:px-5"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-brand">Latest activity</p><h2 className="mt-1 text-base font-bold text-brand-dark">Recent Orders</h2><p className="mt-1 text-sm text-gray-500">Your most recent customer orders.</p></div><Link href="/admin/orders" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-accent px-3 py-2 text-xs font-bold text-white transition hover:bg-orange-700">View all orders <AdminIcon name="chev" size={14}/></Link></div><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="border-y border-brand/10 bg-brand-soft/50 text-xs font-bold uppercase tracking-wide text-brand"><tr><th className="px-5 py-3">Order ID</th><th className="px-4 py-3">Customer</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3">Status</th><th/></tr></thead><tbody className="divide-y divide-gray-100">{orders.map((order) => <tr className="transition-colors hover:bg-brand-soft/40" key={order.id}><td className="px-5 py-4"><Link href={`/admin/orders/${order.id}`} className="font-semibold text-brand">{order.id}</Link></td><td className="px-4 py-4"><div className="flex items-center gap-2.5"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-bold text-brand">{order.customer.split(" ").map((part) => part[0]).join("")}</span><span className="font-medium text-gray-800">{order.customer}</span></div></td><td className="whitespace-nowrap px-4 py-4 text-gray-500">{order.date}</td><td className="whitespace-nowrap px-4 py-4 font-bold text-brand-dark">{money(order.total)}</td><td className="px-4 py-4"><span className={`mr-2 inline-block size-2 rounded-full ${order.payment === "Pending" ? "bg-accent" : "bg-brand"}`}/>{order.payment}</td><td className="px-4 py-4"><OrderStatusPill status={order.status}/></td><td className="px-3 py-4"><Link href={`/admin/orders/${order.id}`} aria-label={`Open ${order.id}`} className="text-accent hover:text-brand"><AdminIcon name="chev" size={16}/></Link></td></tr>)}</tbody></table></div></section>;
+}

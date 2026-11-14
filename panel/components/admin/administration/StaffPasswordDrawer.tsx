@@ -1,0 +1,9 @@
+import { useState, type FormEvent } from "react";
+import { Eye, EyeOff, KeyRound } from "lucide-react";
+import AdminDrawer from "@/components/admin/AdminDrawer";
+
+export function StaffPasswordDrawer({ open, name, onClose, onSubmit, isSaving }: { open: boolean; name: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>, password: string) => void; isSaving: boolean }) {
+  const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
+  return <AdminDrawer open={open} onClose={() => { setPassword(""); onClose(); }} title="Reset staff password" description={`Set a new password for ${name || "this staff member"}. Their active sessions will be revoked.`}><form onSubmit={(event) => { event.preventDefault(); onSubmit(event, password); }} className="space-y-4 p-5 sm:p-6"><label className="block text-xs font-semibold text-gray-700">New password<span className="relative mt-1.5 block"><KeyRound size={15} className="absolute left-3 top-3 text-gray-400"/><input required minLength={12} maxLength={128} type={visible ? "text" : "password"} className="h-10 w-full rounded-lg border border-gray-200 px-9 pr-10 text-sm outline-none focus:border-brand" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters"/><button type="button" onClick={() => setVisible((value) => !value)} className="absolute right-2 top-2 grid size-6 place-items-center text-gray-400">{visible ? <EyeOff size={15}/> : <Eye size={15}/>}</button></span></label><div className="flex justify-end gap-2 border-t border-gray-100 pt-4"><button type="button" onClick={onClose} disabled={isSaving} className="h-10 rounded-lg border border-gray-200 px-4 text-sm font-semibold text-gray-600">Cancel</button><button disabled={isSaving} className="h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? "Saving…" : "Reset password"}</button></div></form></AdminDrawer>;
+}

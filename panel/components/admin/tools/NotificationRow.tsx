@@ -1,0 +1,10 @@
+import { CheckCircle2, ChevronRight, CircleAlert, CreditCard, Package, UserRoundPlus } from "lucide-react";
+
+import type { DemoNotification } from "@/lib/admin-tools-demo";
+
+export function NotificationRow({ item, onOpen }: { item: DemoNotification; onOpen: (item: DemoNotification) => void }) {
+  const icons = { ORDER: Package, PAYMENT: CreditCard, STOCK: CircleAlert, REVIEW: CheckCircle2, CUSTOMER: UserRoundPlus };
+  const tones = { ORDER: "border-sky-100 bg-sky-50 text-sky-700", PAYMENT: "border-emerald-100 bg-emerald-50 text-emerald-700", STOCK: "border-amber-100 bg-amber-50 text-amber-700", REVIEW: "border-purple-100 bg-purple-50 text-purple-700", CUSTOMER: "border-brand/10 bg-brand-soft text-brand" };
+  const Icon = icons[item.type];
+  return <button onClick={() => onOpen(item)} className={`flex w-full items-start gap-3 px-4 py-4 text-left transition hover:bg-gray-50 sm:gap-4 sm:px-5 ${item.isRead ? "bg-white" : "bg-brand-soft/25"}`}><span className={`mt-0.5 grid size-11 shrink-0 place-items-center rounded-xl border ${tones[item.type]}`}><Icon size={18}/></span><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-3"><strong className="truncate text-sm font-bold text-gray-900">{item.title}</strong><span className="flex shrink-0 items-center gap-2">{!item.isRead && <i className="size-2 rounded-full bg-brand"/>}<ChevronRight size={15} className="text-gray-300"/></span></span><span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">{item.type.toLowerCase()} activity</span><span className="mt-2 block text-sm leading-5 text-gray-600">{item.body}</span><span className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-500"><span>{new Date(item.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span><span className={`rounded-full px-2 py-0.5 font-semibold ${item.isRead ? "bg-gray-100 text-gray-600" : "bg-brand-soft text-brand"}`}>{item.isRead ? "Read" : "Unread"}</span>{item.target && <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-700">Opens linked page</span>}</span></span></button>;
+}

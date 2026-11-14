@@ -1,0 +1,5 @@
+import { CheckCheck } from "lucide-react";
+
+export function NotificationHero({ unreadCount, onMarkAllRead }: { unreadCount: number; onMarkAllRead: () => void }) {
+  return <section className="overflow-hidden rounded-2xl border border-brand/10 bg-gradient-to-br from-brand-soft via-white to-white p-5 sm:p-7"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-brand">Notification inbox</p><h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">Stay on top of system activity</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">Track order, payment, stock, review, and customer events from one place.</p></div><button disabled={!unreadCount} onClick={onMarkAllRead} className="inline-flex h-10 items-center gap-2 self-start rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"><CheckCheck size={16}/> Mark all read</button></div></section>;
+}

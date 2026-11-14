@@ -1,0 +1,345 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { siteFont } from "@/lib/fonts";
+import { ArIcon } from "@/components/shared/ArIcon";
+import {
+  HomePageBagIcon,
+  HomePageChevronDownIcon,
+  HomePageMenuIcon,
+  HomePageSearchIcon,
+  HomePageUserIcon,
+} from "@/components/home-page/nestt-furniture-home-page-icons";
+import {
+  recommendedHomePageProducts,
+  freshArrivalHomePageProducts,
+} from "@/components/home-page/nestt-furniture-home-page-content";
+import { MegaMenu } from "./MegaMenu";
+import { MobileMenu } from "./MobileMenu";
+import { navigationItems } from "./navigation-data";
+
+const products = [
+  ...recommendedHomePageProducts.map((product) => ({
+    ...product,
+    href: "/#recommended",
+  })),
+  ...freshArrivalHomePageProducts.map((product) => ({
+    ...product,
+    href: "/#fresh-arrivals",
+  })),
+];
+
+export function Navbar({
+  variant = "default",
+  onBagClick,
+}: {
+  variant?: "default" | "hero" | "product";
+  onBagClick?: () => void;
+}) {
+  const router = useRouter();
+  const isHero = variant === "hero";
+  const isProduct = variant === "product";
+  const usesBrandAsset = isHero;
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const root = useRef<HTMLElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeItem = navigationItems.find((item) => item.id === activeMenu);
+  const matches = products.filter((product) =>
+    `${product.name} ${product.category}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+
+  function cancelClose() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }
+
+  function closeNavigation() {
+    cancelClose();
+    setActiveMenu(null);
+    setMobileMenuOpen(false);
+    setSearchOpen(false);
+  }
+
+  function openMenu(id: string) {
+    cancelClose();
+    setActiveMenu(id);
+    setSearchOpen(false);
+  }
+
+  useEffect(() => {
+    function onOutsidePointer(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !root.current?.contains(event.target)
+      ) {
+        setActiveMenu(null);
+        setMobileMenuOpen(false);
+        setSearchOpen(false);
+      }
+    }
+    function onResize() {
+      setActiveMenu(null);
+      setMobileMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onOutsidePointer);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("pointerdown", onOutsidePointer);
+      window.removeEventListener("resize", onResize);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  return (
+    <header
+      ref={root}
+      className={`${siteFont.className} ${isHero ? "absolute inset-x-0 top-0 z-50 border-b border-white/10 bg-transparent text-white" : "sticky top-0 z-50 border-b border-[#e9e7e2] bg-white text-[#252522]"}`}
+      onPointerEnter={cancelClose}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse")
+          closeTimer.current = setTimeout(() => setActiveMenu(null), 180);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          closeNavigation();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          const restoreId = activeMenu
+            ? `navigation-${activeMenu}`
+            : mobileMenuOpen
+              ? "mobile-menu-trigger"
+              : null;
+          closeNavigation();
+          if (restoreId) document.getElementById(restoreId)?.focus();
+        }
+      }}
+    >
+      <div
+        className={`relative z-10 mx-auto flex ${isProduct ? "h-[52px] gap-2 px-5 md:gap-3" : "h-16 gap-5 px-5 lg:gap-6 lg:px-8"} max-w-[1600px] items-center ${isHero ? "gap-0 bg-transparent" : "bg-white"}`}
+      >
+        <a
+          href={isHero ? "#home" : "/"}
+          aria-label="Nestt home"
+          onClick={closeNavigation}
+          className="shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f15a22]"
+        >
+          {usesBrandAsset ? (
+            <Image
+              src="/assets/figma-home/hero-logo.png"
+              alt="Nestt"
+              width={136}
+              height={36}
+              priority
+              className="h-9 w-[136px] object-cover"
+            />
+          ) : (
+            <span
+              className={`font-bold leading-none tracking-[-0.055em] text-[#f15a22] ${isProduct ? "text-[26px] md:text-[29px]" : "text-[30px] lg:text-[34px]"}`}
+            >
+              NESTT
+            </span>
+          )}
+        </a>
+
+        <div
+          className={`relative hidden shrink-0 sm:block ${isHero ? "ml-[31px] mr-auto" : isProduct ? "mr-auto" : "mr-auto"}`}
+        >
+          <form
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSearchOpen(true);
+              setActiveMenu(null);
+            }}
+            className={`flex h-[36px] items-center border focus-within:border-white/40 ${isProduct ? "w-[78px] md:w-[98px]" : "w-[138px] min-[1500px]:w-[180px]"} ${isHero ? "border-white/10 bg-black/10" : "border-[#e9e7e2] bg-[#f8f7f5] focus-within:border-[#aaa69f]"}`}
+          >
+            <HomePageSearchIcon
+              className={`ml-3 size-[18px] shrink-0 ${isHero ? "text-white/65" : "text-[#85817a]"}`}
+            />
+            <input
+              type="search"
+              aria-label="Search furniture"
+              placeholder="Search"
+              autoComplete="off"
+              value={query}
+              onFocus={() => {
+                setSearchOpen(true);
+                setActiveMenu(null);
+              }}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSearchOpen(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setSearchOpen(false);
+              }}
+              className={`min-w-0 flex-1 bg-transparent px-2 text-[13px] leading-6 outline-none ${isHero ? "placeholder:text-white/60" : "placeholder:text-[#8d8982]"}`}
+            />
+          </form>
+          {searchOpen && (
+            <div className="absolute left-0 top-[calc(100%+18px)] w-[min(350px,80vw)] border border-[#e9e7e2] bg-white p-4 shadow-xl">
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <p className="text-xs text-[#85817a]">
+                  {query ? `Results for “${query}”` : "Popular furniture"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(false)}
+                  aria-label="Close search results"
+                  className="flex size-8 cursor-pointer items-center justify-center text-xl hover:bg-[#f6f5f2]"
+                >
+                  ×
+                </button>
+              </div>
+              <ul>
+                {matches.length ? (
+                  matches.slice(0, 5).map((product) => (
+                    <li key={product.name}>
+                      <a
+                        href={product.href}
+                        onClick={closeNavigation}
+                        className="block cursor-pointer px-2 py-3 text-sm hover:bg-[#f6f5f2] focus-visible:outline-2 focus-visible:outline-[#f4131b]"
+                      >
+                        {product.name}
+                        <span className="mt-1 block text-xs text-[#85817a]">
+                          {product.category}
+                        </span>
+                      </a>
+                    </li>
+                  ))
+                ) : (
+                  <li className="py-3 text-sm text-[#85817a]">
+                    No furniture found. Try “bed” or “chair”.
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <nav
+          aria-label="Main navigation"
+          className={`mx-auto hidden h-full items-center ${isProduct ? "gap-2 md:flex min-[1100px]:gap-5" : "gap-5 xl:flex min-[1400px]:gap-7"} ${isHero ? "text-white" : ""}`}
+        >
+          {navigationItems.map((item) => (
+            <button
+              key={item.id}
+              id={`navigation-${item.id}`}
+              type="button"
+              aria-expanded={activeMenu === item.id}
+              aria-controls={`mega-menu-${item.id}`}
+              onPointerEnter={(event) => {
+                if (event.pointerType === "mouse") openMenu(item.id);
+              }}
+              onClick={() => openMenu(item.id)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  openMenu(item.id);
+                  requestAnimationFrame(() =>
+                    document
+                      .querySelector<HTMLAnchorElement>(
+                        `#mega-menu-${item.id} a`,
+                      )
+                      ?.focus(),
+                  );
+                }
+              }}
+              className={`relative inline-flex h-full cursor-pointer items-center gap-1.5 whitespace-nowrap font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#f15a22] after:transition-transform hover:text-[#f15a22] focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#f15a22] ${isProduct ? "text-[9px] md:text-[10px] min-[1100px]:text-[14px]" : "text-[14px]"} ${activeMenu === item.id ? "text-[#f15a22] after:scale-x-100" : "after:scale-x-0"}`}
+            >
+              {item.label}
+              {(!isProduct || item.id === "more") && (
+                <HomePageChevronDownIcon
+                  className={`size-3 transition-transform ${activeMenu === item.id ? "rotate-180" : ""}`}
+                />
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div
+          className={`ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3 ${isHero ? "text-white" : ""}`}
+        >
+          <a
+            href="/ar"
+            onClick={closeNavigation}
+            aria-label="Explore augmented reality furniture"
+            className="hidden size-9 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22] sm:flex"
+          >
+            <ArIcon className="size-[22px]" />
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              closeNavigation();
+              if (onBagClick) onBagClick();
+              else router.push("/account?bag=1");
+            }}
+            aria-label="Open shopping bag"
+            className="flex size-9 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22]"
+          >
+            <HomePageBagIcon className="size-[22px]" />
+          </button>
+          <Link
+            href="/account"
+            onClick={closeNavigation}
+            aria-label="Open your account dashboard"
+            className="flex size-9 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22]"
+          >
+            <HomePageUserIcon className="size-[22px]" />
+          </Link>
+          <button
+            id="mobile-menu-trigger"
+            type="button"
+            aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => {
+              cancelClose();
+              setMobileMenuOpen(!mobileMenuOpen);
+              setSearchOpen(false);
+              setActiveMenu(null);
+            }}
+            className={`flex size-10 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22] ${isProduct ? "md:hidden" : "xl:hidden"}`}
+          >
+            {mobileMenuOpen ? (
+              <span className="text-3xl">×</span>
+            ) : (
+              <HomePageMenuIcon className="size-6" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {activeItem && (
+        <MegaMenu
+          key={activeItem.id}
+          item={activeItem}
+          onNavigate={closeNavigation}
+        />
+      )}
+      {mobileMenuOpen && <MobileMenu onNavigate={closeNavigation} />}
+
+      {(activeMenu || mobileMenuOpen) && (
+        <div
+          aria-hidden="true"
+          onPointerDown={closeNavigation}
+          onPointerEnter={(event) => {
+            if (event.pointerType === "mouse" && !mobileMenuOpen)
+              setActiveMenu(null);
+          }}
+          className={`fixed inset-x-0 bottom-0 top-[76px] -z-10 bg-black/20 ${mobileMenuOpen ? "xl:hidden" : "hidden xl:block"}`}
+        />
+      )}
+    </header>
+  );
+}

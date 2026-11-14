@@ -1,0 +1,5 @@
+const card = "rounded-lg border border-gray-200 bg-white p-4 sm:p-5";
+
+export function InternalNoteCard({ note, saved, onNoteChange, onSave }: { note: string; saved: boolean; onNoteChange: (value: string) => void; onSave: () => void }) {
+  return <section className={card}><div><h2 className="text-base font-bold text-gray-950">Internal note</h2><p className="mt-1 text-sm text-gray-500">Add a note for your team about this order.</p></div><textarea className="mt-4 block min-h-24 w-full resize-y rounded-lg border border-gray-200 p-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand focus:ring-4 focus:ring-brand/10" value={note} onChange={(event) => onNoteChange(event.target.value)} placeholder="Write a note..." rows={3}/><div className="mt-3 flex items-center justify-between gap-3"><span className="text-xs text-gray-500">{saved ? "Note saved for this session." : "Only visible to your team"}</span><button className="rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50" onClick={onSave} disabled={!note.trim()}>Save note</button></div></section>;
+}

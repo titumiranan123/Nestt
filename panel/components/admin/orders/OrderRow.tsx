@@ -1,0 +1,19 @@
+import Link from "next/link";
+
+import { ArrowRight } from "lucide-react";
+
+import type { DemoOrder } from "@/lib/demo-admin-data";
+
+import { money } from "@/lib/demo-admin-data";
+
+import AdminIcon from "@/components/admin/AdminIcon";
+
+import { OrderStatusPill } from "@/components/admin/orders/OrderStatusPill";
+
+export function OrderRow({ order, expanded, onToggle }: { order: DemoOrder; expanded: boolean; onToggle: () => void }) {
+  const paymentTone = order.payment === "Paid" ? "bg-brand" : order.payment === "Pending" ? "bg-accent" : "bg-orange-300";
+  return <>
+    <tr className="transition-colors hover:bg-brand-soft/35"><td className="px-5 py-4"><input className="size-4 accent-accent" type="checkbox" aria-label={`Select ${order.id}`}/></td><td className="px-3 py-4 font-mono text-xs text-gray-600"><Link href={`/admin/orders/${order.id}`} className="font-bold text-brand">{order.id}</Link></td><td className="px-3 py-4"><div className="flex min-w-48 items-center gap-2.5"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-bold text-brand">{order.customer.split(" ").map((part) => part[0]).join("")}</span><span className="min-w-0"><strong className="block truncate text-sm font-medium text-gray-900">{order.customer}</strong><small className="mt-0.5 block truncate text-xs text-gray-500">{order.email}</small></span></div></td><td className="whitespace-nowrap px-3 py-4 font-bold text-brand-dark">{money(order.total)}<small className="mt-1 block text-xs font-normal text-gray-500">Qty: {order.items.reduce((sum, item) => sum + item.quantity, 0)} pcs</small></td><td className="px-3 py-4 text-center"><OrderStatusPill status={order.status}/></td><td className="px-3 py-4 text-center"><span className="inline-flex flex-col items-center gap-1"><span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${order.payment === "Paid" ? "bg-brand-soft text-brand" : order.payment === "Pending" ? "bg-orange-50 text-accent" : "bg-orange-100 text-orange-800"}`}>{order.payment}</span><span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><i className={`size-1.5 rounded-full ${paymentTone}`}/>{order.method}</span></span></td><td className="px-3 py-4"><span className="text-sm text-gray-700">{order.status === "Delivered" ? "Delivered" : order.status === "Shipped" ? "In transit" : "Not shipped"}</span>{(order.status === "Delivered" || order.status === "Shipped") && <small className="mt-1 block text-xs text-gray-500">Updated manually</small>}</td><td className="whitespace-nowrap px-3 py-4 text-xs text-gray-500">{order.date}</td><td className="px-3 py-4"><button className={`grid size-8 place-items-center rounded-lg border border-brand/15 bg-white text-brand transition hover:border-accent/30 hover:bg-orange-50 hover:text-accent ${expanded ? "rotate-90" : ""}`} aria-label={expanded ? "Hide order items" : "Show order items"} onClick={onToggle}><AdminIcon name="chev" size={15}/></button></td></tr>
+    {expanded && <tr className="bg-brand-soft/25"><td colSpan={9} className="px-7 py-4"><div className="flex items-center gap-3 rounded-lg border border-accent/20 bg-white p-4"><div className="grid size-11 place-items-center rounded-lg bg-orange-50"><span className="size-6 rounded border border-amber-800 bg-amber-300"/></div><div className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-gray-800">{order.items[0].name}</strong><small className="mt-1 block text-xs text-gray-500">SKU {order.items[0].sku} · Qty {order.items[0].quantity}</small></div><strong className="text-sm font-bold text-brand-dark">{money(order.items[0].price)}</strong><Link className="ml-3 inline-flex items-center gap-1 text-sm font-bold text-accent hover:text-brand" href={`/admin/orders/${order.id}`}>View details <ArrowRight size={14}/></Link></div></td></tr>}
+  </>;
+}

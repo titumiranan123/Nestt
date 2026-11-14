@@ -1,0 +1,5 @@
+import { ShieldCheck, UserCheck, UserRoundCog, Users } from "lucide-react";
+export function StaffStats({ summary }: { summary: { total: number; active: number; admins: number; managers: number } }) {
+  const stats = [{ label: "Total staff", value: summary.total, icon: Users }, { label: "Active", value: summary.active, icon: UserCheck }, { label: "Admins", value: summary.admins, icon: ShieldCheck }, { label: "Managers", value: summary.managers, icon: UserRoundCog }];
+  return <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <article key={label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p><span className="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand"><Icon size={17}/></span></div><p className="mt-2 text-2xl font-bold text-gray-950">{value}</p></article>)}</section>;
+}

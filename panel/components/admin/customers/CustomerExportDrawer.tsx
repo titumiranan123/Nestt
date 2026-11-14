@@ -1,0 +1,7 @@
+import { FormEvent } from "react";
+import { Download } from "lucide-react";
+import AdminDrawer from "@/components/admin/AdminDrawer";
+
+export function CustomerExportDrawer({ open, from, to, onFrom, onTo, onClose, onSubmit }: { open: boolean; from: string; to: string; onFrom: (value: string) => void; onTo: (value: string) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <AdminDrawer open={open} onClose={onClose} title="Export customers" description="Choose a joined-date range for the temporary CSV export."><form onSubmit={onSubmit} className="space-y-4 p-5 sm:p-6"><label className="block text-xs font-semibold text-gray-700">Joined from<input type="date" className="mt-1.5 h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" value={from} onChange={(event) => onFrom(event.target.value)}/></label><label className="block text-xs font-semibold text-gray-700">Joined to<input type="date" className="mt-1.5 h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" value={to} onChange={(event) => onTo(event.target.value)}/></label><div className="flex justify-end gap-2 border-t border-gray-100 pt-4"><button type="button" onClick={onClose} className="h-10 rounded-lg border border-gray-200 px-4 text-sm font-semibold text-gray-600">Cancel</button><button type="submit" className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white"><Download size={15}/> Download CSV</button></div></form></AdminDrawer>;
+}

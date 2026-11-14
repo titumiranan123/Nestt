@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "viewportWidths": [
+    1440,
+    768,
+    390,
+    360
+  ],
+  "routes": [
+    "/account",
+    "/account/orders",
+    "/account/orders/NST-10482",
+    "/account/addresses",
+    "/account/profile",
+    "/account/wishlist"
+  ],
+  "browserErrors": [],
+  "generatedAt": "2026-11-13T18:40:17.702Z"
+}

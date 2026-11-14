@@ -1,0 +1,5 @@
+import { Database, PlayCircle } from "lucide-react";
+
+export function BackupHeader({ onCreate }: { onCreate: () => void }) {
+  return <header className="flex flex-col justify-between gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center"><div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-brand"><Database size={15}/> Administration</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-950">Backup History</h1><p className="mt-1 max-w-2xl text-sm text-gray-500">Review automatic and manual backup runs. This page uses sample records only.</p></div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-semibold text-green-700">Demo workspace</span><button onClick={onCreate} className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark"><PlayCircle size={15}/> Backup Now</button></div></header>;
+}

@@ -1,0 +1,7 @@
+import { ArrowDownToLine, Eye } from "lucide-react";
+import type { DemoBackup } from "@/lib/admin-operations-demo";
+
+export function BackupRow({ backup, onView, onDownload }: { backup: DemoBackup; onView: () => void; onDownload: () => void }) {
+  const tone = backup.status === "SUCCESS" ? "bg-green-50 text-green-700" : backup.status === "RUNNING" ? "bg-sky-50 text-sky-700" : "bg-red-50 text-red-700";
+  return <tr className="hover:bg-gray-50/70"><td className="px-4 py-4"><strong className="block max-w-80 truncate text-sm font-semibold text-gray-900">{backup.filename}</strong><small className="mt-1 block text-[10px] text-gray-400">{backup.id} · {backup.type}</small></td><td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${tone}`}>{backup.status}</span></td><td className="px-4 py-4 text-sm text-gray-700">{backup.size}</td><td className="whitespace-nowrap px-4 py-4 text-xs text-gray-500">{backup.startedAt}</td><td className="whitespace-nowrap px-4 py-4 text-xs text-gray-500">{backup.finishedAt}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><button onClick={onView} className="grid size-8 place-items-center rounded-md text-gray-500 hover:bg-gray-100" aria-label="View backup details"><Eye size={15}/></button><button disabled={backup.status !== "SUCCESS"} onClick={onDownload} className="grid size-8 place-items-center rounded-md text-brand hover:bg-brand-soft disabled:opacity-30" aria-label="Download backup manifest"><ArrowDownToLine size={15}/></button></div></td></tr>;
+}

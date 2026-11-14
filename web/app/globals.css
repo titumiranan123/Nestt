@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --color-cream: #f7f5f1;
+  --color-ink: #1c1b18;
+  --color-muted: #76736d;
+  --color-line: #e5e0d8;
+  --color-coral: #e95f3d;
+  --color-coral-light: #ffb09a;
+}
+
+@theme inline {
+  --color-cream: var(--color-cream);
+  --color-ink: var(--color-ink);
+  --color-muted: var(--color-muted);
+  --color-line: var(--color-line);
+  --color-coral: var(--color-coral);
+  --color-coral-light: var(--color-coral-light);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 76px;
+}
+
+@keyframes product-drawer-enter {
+  from { transform: translate3d(100%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes product-drawer-exit {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(100%, 0, 0); }
+}
+
+@keyframes product-drawer-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes product-drawer-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.product-info-drawer {
+  animation: product-drawer-enter 320ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+  will-change: transform;
+}
+
+.product-info-drawer--closing {
+  animation: product-drawer-exit 260ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.product-info-dialog[open]::backdrop {
+  animation: product-drawer-backdrop-enter 240ms ease-out both;
+}
+
+.product-info-dialog[data-closing="true"]::backdrop {
+  animation: product-drawer-backdrop-exit 260ms ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-info-drawer,
+  .product-info-drawer--closing,
+  .product-info-dialog[open]::backdrop,
+  .product-info-dialog[data-closing="true"]::backdrop {
+    animation-duration: 1ms;
+  }
+}

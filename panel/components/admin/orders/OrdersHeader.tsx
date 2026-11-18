@@ -1,8 +1,8 @@
-import { Download } from "lucide-react";
+import { CirclePlus, Download } from "lucide-react";
 
 import AdminIcon from "@/components/admin/AdminIcon";
 
-export function OrdersHeader({ onExport }: { onExport: () => void }) {
+export function OrdersHeader({ onExport, onCreate }: { onExport: () => void; onCreate?: () => void }) {
   return (
     <div className="flex flex-col justify-between gap-4 rounded-xl border border-brand/10    p-4 sm:flex-row sm:items-center sm:px-5">
       <div>
@@ -19,6 +19,7 @@ export function OrdersHeader({ onExport }: { onExport: () => void }) {
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {onCreate && <button type="button" onClick={onCreate} className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-dark"><CirclePlus size={16}/>Create order</button>}
         <button
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-700"
           onClick={onExport}

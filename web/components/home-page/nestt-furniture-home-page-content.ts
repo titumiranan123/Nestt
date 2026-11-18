@@ -5,44 +5,11 @@ export type HomePageImageCard = {
   action: string;
 };
 
-export type HomePageProduct = {
-  name: string;
-  category: string;
-  price: string;
-  oldPrice?: string;
-  image: string;
-  badge: string;
-  detail?: string;
-  reviewCount?: number;
-};
-
 export const homePageRoomLinks = [
   { name: "Living Room", image: "/assets/figma-home/room-living.png" },
   { name: "Bedroom", image: "/assets/figma-home/room-bedroom.png" },
   { name: "Dining Room", image: "/assets/figma-home/room-dining.png" },
   { name: "Home Office", image: "/assets/figma-home/room-office.png" },
-];
-
-export const homePageCategoryLinks = [
-  { name: "Sofas", image: "/assets/figma-home/category-sofas.png", count: "52 Models" },
-  { name: "Beds", image: "/assets/figma-home/category-beds.png", count: "36 Models" },
-  { name: "Tables", image: "/assets/figma-home/category-tables.png", count: "44 Models" },
-  { name: "Chairs", image: "/assets/figma-home/category-chairs.png", count: "68 Models" },
-  { name: "Storage", image: "/assets/figma-home/category-storage.png", count: "31 Models" },
-  { name: "Decor", image: "/assets/figma-home/category-decor.png", count: "82 Models" },
-];
-
-export const recommendedHomePageProducts: HomePageProduct[] = [
-  { name: "Oslo High-Back Recliner", category: "Lounge seating", price: "৳ 48,500", image: "/assets/figma-home/product-oslo.png", badge: "Trending Lounge Chair", detail: "Ergonomic Comfort", reviewCount: 128 },
-  { name: "Kyoto Extendable Dining Table", category: "Dining tables", price: "৳ 62,000", image: "/assets/figma-home/product-kyoto.png", badge: "Solid Beech Joinery", detail: "Solid Beech Joinery", reviewCount: 128 },
-  { name: "Sylvan Hydraulic King Bed", category: "Beds & bed frames", price: "৳ 94,000", image: "/assets/figma-home/product-sylvan.png", badge: "Bestseller Bedroom", detail: "Hydraulic Storage", reviewCount: 128 },
-  { name: "Arcus Fluted Timber Credenza", category: "Storage & cabinets", price: "৳ 56,000", image: "/assets/figma-home/product-arcus.png", badge: "Architectural Storage", detail: "Soft-Close German Rails", reviewCount: 92 },
-];
-
-export const freshArrivalHomePageProducts: HomePageProduct[] = [
-  { name: "Vanguard Modular Sectional", category: "Living room", price: "৳ 1,18,000", oldPrice: "৳ 1,35,000", image: "/assets/figma-home/fresh-vanguard.png", badge: "New Arrival" },
-  { name: "Aero Bentwood Occasional Chair", category: "Accent chairs", price: "৳ 32,500", oldPrice: "৳ 37,000", image: "/assets/figma-home/fresh-aero.png", badge: "New Arrival" },
-  { name: "Krona Smart Study Desk", category: "Home office", price: "৳ 41,000", oldPrice: "৳ 47,000", image: "/assets/figma-home/fresh-krona.png", badge: "New Arrival" },
 ];
 
 export const homePageExperienceCards: HomePageImageCard[] = [

@@ -1,6 +1,50 @@
-import Image from "next/image";
-import { freshArrivalHomePageProducts } from "./nestt-furniture-home-page-content";
+import Link from "next/link";
+import { money } from "@/lib/account/data";
+import { catalogImageUrl, defaultVariant, variantImage } from "@/lib/catalog";
+import { loadProductCollection } from "@/lib/public-products";
 
-export function NesttFurnitureHomePageFreshArrivalsSection() {
-  return <section className="bg-white px-6 pb-12 pt-10" id="fresh-arrivals"><div className="mx-auto max-w-[1392px]"><div className="mb-6 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#f15a22]">✦ &nbsp; New in store</p><h2 className="mt-2 text-[36px] font-semibold leading-tight tracking-[-0.04em] text-[#1b1b1b]">Fresh Arrivals</h2></div><a className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.12em] text-[#222] underline decoration-[#f15a22] underline-offset-4" href="#showrooms">View all arrivals</a></div><div className="grid gap-4 md:grid-cols-3">{freshArrivalHomePageProducts.map((product) => <article className="group border border-[#e4e4e4] p-3" key={product.name}><div className="relative aspect-[1.55] overflow-hidden bg-[#efeee9]"><Image className="object-cover transition duration-700 group-hover:scale-105" src={product.image} alt={product.name} fill sizes="(max-width: 768px) 100vw, 33vw" /><span className="absolute left-3 top-3 bg-[#f15a22] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-white">New arrival</span></div><div className="flex items-start justify-between gap-3 pt-3"><div><p className="text-[9px] uppercase tracking-[0.15em] text-[#858585]">{product.category}</p><h3 className="mt-1 text-[14px] font-semibold leading-5 text-[#222]">{product.name}</h3></div><div className="shrink-0 text-right text-[13px] font-semibold text-[#222]"><p>{product.price}</p>{product.oldPrice && <p className="mt-1 text-[10px] font-normal text-[#999] line-through">{product.oldPrice}</p>}</div></div><p className="mt-2 text-[10px] text-[#888]">Save on this new-season design</p></article>)}</div></div></section>;
+const grid = "grid gap-4 md:grid-cols-3";
+
+export async function NesttFurnitureHomePageFreshArrivalsSection() {
+  const products = await loadProductCollection("new-arrivals");
+  if (!products?.length) return null;
+
+  return (
+    <section className="bg-white px-6 pb-12 pt-10" id="fresh-arrivals" aria-labelledby="fresh-arrivals-title">
+      <div className="mx-auto max-w-[1392px]">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <h2 id="fresh-arrivals-title" className="text-[36px] font-semibold leading-tight tracking-[-0.04em] text-[#1b1b1b]">
+            Fresh Arrivals
+          </h2>
+          <Link href="/products?new=true" className="text-sm font-semibold text-[#a63d1a] underline underline-offset-4">
+            View all arrivals
+          </Link>
+        </div>
+        <div className={grid}>
+          {products.map((product) => {
+            const variant = defaultVariant(product);
+            const image = catalogImageUrl(variantImage(variant)?.url);
+            const price = Number(variant?.price);
+
+            return <Link key={product.id} href={`/products/${encodeURIComponent(product.slug)}`} prefetch={false}
+              className="group block min-w-0 border border-[#e4e4e4] p-3 hover:border-[#b8ada5]">
+              <div className="relative aspect-[1.55] overflow-hidden bg-[#efeee9]">
+                {image && <img src={image} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.03]" />}
+                <span className="absolute left-3 top-3 bg-[#a63d1a] px-2 py-1 text-xs font-semibold text-white">New arrival</span>
+              </div>
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 pt-3">
+                <div>
+                  {product.category && <p className="text-xs text-[#666]">{product.category.name}</p>}
+                  <h3 className="mt-1 text-sm font-semibold leading-5 text-[#222]">{product.name}</h3>
+                </div>
+                <p className="text-sm font-semibold text-[#222]">
+                  {product.isPriceOnRequest ? "Price on request" : Number.isFinite(price) ? money(price) : "Price unavailable"}
+                </p>
+              </div>
+            </Link>;
+          })}
+        </div>
+      </div>
+    </section>
+  );
 }

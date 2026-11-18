@@ -48,6 +48,18 @@ export class AttributesRepository {
     return this.db.attribute.findUnique({ where: { id } });
   }
 
+  findAdminById(id: string) {
+    return this.db.attribute.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        options: {
+          where: { deletedAt: null },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        },
+      },
+    });
+  }
+
   create(data: Prisma.AttributeCreateInput) {
     return this.db.attribute.create({ data });
   }

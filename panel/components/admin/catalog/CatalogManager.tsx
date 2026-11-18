@@ -8,6 +8,8 @@ import { CatalogHeader } from "@/components/admin/catalog/CatalogHeader";
 import CatalogPagination from "@/components/admin/catalog/CatalogPagination";
 import CatalogStatsGrid, { type CatalogStat } from "@/components/admin/catalog/CatalogStatsGrid";
 import CatalogTable from "@/components/admin/catalog/CatalogTable";
+import AttributeCatalogManager from "@/components/admin/catalog/AttributeCatalogManager";
+import CategoryCatalogManager from "@/components/admin/catalog/CategoryCatalogManager";
 import { confirmAdminAction, showAdminNotice } from "@/lib/admin-swal";
 import { demoAttributes, demoBrands, demoCategories, demoProducts, type CatalogRecord } from "@/lib/catalog-demo-data";
 
@@ -32,6 +34,12 @@ const emptyForm = (): CatalogForm => ({ id: "", name: "", slug: "", isPublished:
 const makeSlug = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export default function CatalogManager({ kind }: { kind: CatalogKind }) {
+  if (kind === "categories") return <CategoryCatalogManager />;
+  if (kind === "attributes") return <AttributeCatalogManager />;
+  return <DemoCatalogManager kind={kind} />;
+}
+
+function DemoCatalogManager({ kind }: { kind: Exclude<CatalogKind, "categories"> }) {
   const [rows, setRows] = useState<CatalogRecord[]>(() => datasets[kind].map((row) => ({ ...row, options: row.options ? [...row.options] : [] })));
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All status");
@@ -71,7 +79,7 @@ export default function CatalogManager({ kind }: { kind: CatalogKind }) {
     const record = { ...form, name: form.name.trim(), slug: form.slug.trim() || makeSlug(form.name), createdAt: editing?.createdAt ?? new Date().toISOString(), options: kind === "attributes" ? optionText.split(",").map((value) => value.trim()).filter(Boolean) : form.options };
     if (editing) setRows((current) => current.map((row) => row.id === editing.id ? { ...row, ...record, id: row.id } : row));
     else {
-      const prefix = kind === "products" ? "PR" : kind === "categories" ? "CAT" : kind === "attributes" ? "ATR" : "BR";
+      const prefix = kind === "products" ? "PR" : kind === "attributes" ? "ATR" : "BR";
       const next = String(Math.max(0, ...rows.map((row) => Number(row.id.match(/(\d+)$/)?.[1] ?? 0))) + 1).padStart(3, "0");
       setRows((current) => [{ ...record, id: `${prefix}-${next}` }, ...current]);
     }

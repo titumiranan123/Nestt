@@ -13,6 +13,7 @@ import { StaffHeader } from "@/components/admin/administration/StaffHeader";
 import { StaffPasswordDrawer } from "@/components/admin/administration/StaffPasswordDrawer";
 import { StaffStats } from "@/components/admin/administration/StaffStats";
 import { StaffTable } from "@/components/admin/administration/StaffTable";
+import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
 
 type Mode = "create" | "edit" | "view" | null;
 const emptyDraft = (): StaffDraft => ({ name: "", email: "", password: "", phone: "", role: "SUPPORT", status: "ACTIVE", verified: false });
@@ -96,7 +97,7 @@ export function StaffManager() {
     <StaffFilters search={search} role={role} status={status} onSearch={(value) => { setSearch(value); setPage(1); }} onRole={(value) => { setRole(value as DemoStaff["role"] | "ALL"); setPage(1); }} onStatus={(value) => { setStatus(value as StaffStatus | "ALL"); setPage(1); }} onReset={resetFilters}/>
     <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-4"><div><h2 className="text-sm font-bold text-gray-900">Staff members</h2><p className="mt-1 text-xs text-gray-500">{staffQuery.data?.total ?? 0} team accounts</p></div>{staffQuery.isFetching && <span className="text-xs text-gray-500">Updating…</span>}</div>
-      <StaffTable staff={staff} onView={(item) => openStaff(item, "view")} onEdit={(item) => openStaff(item, "edit")} onPassword={(item) => { setSelected(item); setPasswordOpen(true); }} onDelete={remove} canEdit={canEdit} canResetPassword={canEdit} canDelete={canDelete}/>
+      {staffQuery.isPending ? <AdminLoadingSkeleton kind="table" columns={7} label="Loading staff" /> : <StaffTable staff={staff} onView={(item) => openStaff(item, "view")} onEdit={(item) => openStaff(item, "edit")} onPassword={(item) => { setSelected(item); setPasswordOpen(true); }} onDelete={remove} canEdit={canEdit} canResetPassword={canEdit} canDelete={canDelete}/>}
       <footer className="flex items-center justify-between gap-4 border-t border-gray-100 px-4 py-3 text-xs text-gray-500"><span>Showing {firstItem}–{lastItem} of {staffQuery.data?.total ?? 0}</span><div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-md border border-gray-200 px-3 py-1.5 font-semibold disabled:opacity-40">Previous</button><span>Page {page} of {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-md border border-gray-200 px-3 py-1.5 font-semibold disabled:opacity-40">Next</button></div></footer>
     </section>
     <StaffDrawer open={mode !== null} mode={mode} staff={selected} draft={draft} onDraft={onDraft} onClose={() => setMode(null)} onSave={save} isSaving={createMutation.isPending || updateMutation.isPending}/>

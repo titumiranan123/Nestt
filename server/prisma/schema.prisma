@@ -461,6 +461,7 @@ model Product {
   features             String[]            @default([])
   pairSources          PairWellWith[]      @relation("PairSourceProduct")
   pairedIn             PairWellWith[]      @relation("PairedProduct")
+  careItems            ProductCareItem[]
   variants             ProductVariant[]
   collectionProducts   CollectionProduct[]
 
@@ -476,6 +477,20 @@ model Product {
   @@index([brandId])
   @@index([status])
   @@map("products")
+}
+
+model ProductCareItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @db.Uuid
+  title        String
+  description  String?
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_care_items")
 }
 
 model ProductVariant {
@@ -564,6 +579,7 @@ model ARProductAsset {
   id           String         @id @default(uuid()) @db.Uuid
   variantId    String         @unique @db.Uuid
   modelUrl     String
+  usdzUrl      String?
   dimensionsMm Json
   placement    String
   isPublished  Boolean        @default(false)
@@ -1137,6 +1153,10 @@ model Order {
   orderSource           OrderSource          @default(ONLINE) @map("order_source")
   shippingName          String               @map("shipping_name") @db.VarChar(100)
   shippingPhone         String               @map("shipping_phone") @db.VarChar(20)
+  contactEmail          String?              @map("contact_email") @db.VarChar(255)
+  orderPhoneOtpSentAt   DateTime?            @map("order_phone_otp_sent_at") @db.Timestamp(6)
+  orderPhoneVerifiedAt  DateTime?            @map("order_phone_verified_at") @db.Timestamp(6)
+  emergencyContactPhone String?              @map("emergency_contact_phone") @db.VarChar(20)
   shippingRegion        String               @map("shipping_region") @db.VarChar(100)
   shippingCity          String               @map("shipping_city") @db.VarChar(100)
   shippingArea          String               @map("shipping_area") @db.VarChar(100)
@@ -1250,12 +1270,25 @@ model OrderStatusHistory {
   source        TrackingSource @default(SYSTEM)
   changedByUser User?          @relation(fields: [changedBy], references: [id], onDelete: SetNull)
   order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  email         OrderStatusEmail?
 
   @@index([orderId])
   @@index([source])
   @@index([isPublic])
   @@index([changedBy])
   @@map("order_status_histories")
+}
+
+model OrderStatusEmail {
+  historyId   String             @id @map("history_id") @db.Uuid
+  recipient   String             @db.VarChar(320)
+  availableAt DateTime           @default(now()) @map("available_at") @db.Timestamp(6)
+  sentAt      DateTime?          @map("sent_at") @db.Timestamp(6)
+  attempts    Int                @default(0)
+  history     OrderStatusHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt, availableAt])
+  @@map("order_status_emails")
 }
 
 model Payment {

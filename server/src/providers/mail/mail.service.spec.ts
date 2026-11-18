@@ -26,11 +26,11 @@ describe('MailService', () => {
       from: 'Nestt <noreply@example.com>',
       to: 'user@example.com',
       subject: 'Verify',
-      text: expect.stringContaining('Or use this link: https://example.com/verify'),
+      text: expect.stringContaining('Continue on Nestt and enter your code: https://example.com/verify'),
     }));
     await service.sendVerificationEmail('user@example.com', 'Reset', '654321');
     expect(mailer.sendMail).toHaveBeenLastCalledWith(expect.objectContaining({
-      text: expect.not.stringContaining('Or use this link'),
+      text: expect.not.stringContaining('Continue on Nestt'),
     }));
   });
 
@@ -38,5 +38,20 @@ describe('MailService', () => {
     const { service, mailer } = makeMailer();
     mailer.sendMail.mockRejectedValueOnce(new Error('smtp unavailable'));
     await expect(service.sendVerificationEmail('user@example.com', 'Verify', '123456')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('uses the status event as the SMTP idempotency key', async () => {
+    const { service, mailer } = makeMailer();
+    await service.sendOrderStatusEmail({
+      recipient: 'buyer@example.com', historyId: 'event-1', orderId: 'order-1',
+      orderCode: 'NST-TEST', status: 'Shipped', note: 'Tracking is available.',
+      createdAt: new Date('2026-11-18T12:00:00Z'), hasAccount: false,
+    });
+    expect(mailer.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'buyer@example.com',
+      subject: 'Nestt order NST-TEST · Shipped',
+      text: expect.stringContaining('Tracking is available.'),
+      headers: { 'Resend-Idempotency-Key': 'order-status/event-1' },
+    }));
   });
 });

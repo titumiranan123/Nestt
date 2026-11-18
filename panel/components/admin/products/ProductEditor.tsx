@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, LoaderCircle, Save } from "lucide-react";
+import { ArrowLeft, ChevronRight, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { productsApi } from "@/features/products/api";
-import type { Product, ProductInput, ProductVariantInput } from "@/features/products/types";
+import type { Product, ProductCareItemInput, ProductInput, ProductSpecificationInput, ProductVariantInput } from "@/features/products/types";
+import { attributesApi } from "@/features/attributes/api";
+import type { Attribute } from "@/features/attributes/types";
 import { getErrorMessage } from "@/lib/api/errors";
+import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
 import { showAdminNotice } from "@/lib/admin-swal";
 import { ProductContentStep } from "./ProductContentStep";
 import { ProductDetailsStep } from "./ProductDetailsStep";
@@ -18,14 +21,31 @@ type TabId = "details" | "variants" | "content" | "assembly";
 const tabs: { id: TabId; label: string }[] = [{ id: "details", label: "Details" }, { id: "variants", label: "Variants" }, { id: "content", label: "Content" }, { id: "assembly", label: "Assembly & guarantee" }];
 
 function emptyProduct(): ProductInput {
-  return { name: "", slug: "", tags: [], categoryId: "", brandId: null, description: "", useEnvironment: "indoor", status: "draft", sortOrder: 0, isFeatured: false, isNewArrival: false, isBestSeller: false, isContractGrade: false, isCustomizable: false, isPriceOnRequest: false, customizableTextNote: "", assemblyRequired: true, assemblyDuration: null, assemblyPdfUrl: null, guaranteeDays: null, guaranteeLabel: null, guaranteeUrl: null, features: [] };
+  return { name: "", slug: "", tags: [], categoryId: "", brandId: null, description: "", useEnvironment: "indoor", status: "draft", sortOrder: 0, isFeatured: false, isNewArrival: false, isBestSeller: false, isContractGrade: false, isCustomizable: false, isPriceOnRequest: false, customizableTextNote: "", assemblyRequired: true, assemblyDuration: null, assemblyPdfUrl: null, guaranteeDays: null, guaranteeLabel: null, guaranteeUrl: null, features: [], careItems: [], specification: { specs: [] } };
 }
 
 function variantDraft(variant: Product["variants"][number]): VariantDraft {
-  return { id: variant.id, name: variant.name, slug: variant.slug, sku: variant.sku, barcode: variant.barcode, description: variant.description, status: variant.status, sortOrder: variant.sortOrder, isDefault: variant.isDefault, stockQty: variant.stockQty, lowStockAlertQty: variant.lowStockAlertQty, stockStatus: variant.stockStatus, price: Number(variant.price), isOnSale: variant.isOnSale, costPrice: variant.costPrice == null ? null : Number(variant.costPrice), requiresWhiteGlove: variant.requiresWhiteGlove, metaTitle: variant.metaTitle, metaDescription: variant.metaDescription, features: [...variant.features] };
+  return { id: variant.id, name: variant.name, slug: variant.slug, sku: variant.sku, barcode: variant.barcode, description: variant.description, status: variant.status, sortOrder: variant.sortOrder, isDefault: variant.isDefault, stockQty: variant.stockQty, lowStockAlertQty: variant.lowStockAlertQty, stockStatus: variant.stockStatus, price: Number(variant.price), isOnSale: variant.isOnSale, costPrice: variant.costPrice == null ? null : Number(variant.costPrice), requiresWhiteGlove: variant.requiresWhiteGlove, metaTitle: variant.metaTitle, metaDescription: variant.metaDescription, features: [...variant.features], specification: variant.specification ?? { specs: [] }, variantOptions: variant.variantOptions ?? [], media: variant.media ?? [] };
 }
 
 function numberOrNull(value: number | null | undefined) { return value == null || !Number.isFinite(value) ? null : value; }
+
+function normalizeSpecification(value?: ProductSpecificationInput | null): ProductSpecificationInput {
+  return {
+    title: value?.title?.trim() || undefined,
+    image: value?.image?.trim() || null,
+    sortOrder: value?.sortOrder ?? 0,
+    specs: (value?.specs ?? [])
+      .filter((item) => item.label.trim() && item.value.trim())
+      .map((item, index) => ({
+        label: item.label.trim(),
+        value: item.value.trim(),
+        type: item.type ?? "TEXT",
+        href: item.href?.trim() || null,
+        sortOrder: index,
+      })),
+  };
+}
 
 export default function ProductEditor({ productId }: { productId?: string }) {
   const router = useRouter();
@@ -38,11 +58,13 @@ export default function ProductEditor({ productId }: { productId?: string }) {
   const [errorMessage, setErrorMessage] = useState("");
   const product = useQuery({ queryKey: ["admin", "products", productId], queryFn: () => productsApi.get(productId!), enabled: Boolean(productId) });
   const categories = useQuery({ queryKey: ["admin", "categories"], queryFn: productsApi.categories });
+  const brands = useQuery({ queryKey: ["admin", "brands"], queryFn: productsApi.brands });
+  const attributes = useQuery({ queryKey: ["admin", "attributes"], queryFn: attributesApi.list });
 
   useEffect(() => {
     if (!product.data) return;
     const item = product.data;
-    setForm({ name: item.name, slug: item.slug, tags: item.tags ?? [], categoryId: item.categoryId, brandId: item.brandId, description: item.description, useEnvironment: item.useEnvironment, status: item.status, sortOrder: item.sortOrder, isFeatured: item.isFeatured, isNewArrival: item.isNewArrival, isBestSeller: item.isBestSeller, isContractGrade: item.isContractGrade, isCustomizable: item.isCustomizable, isPriceOnRequest: item.isPriceOnRequest, customizableTextNote: item.customizableTextNote, assemblyRequired: item.assemblyRequired, assemblyDuration: item.assemblyDuration, assemblyPdfUrl: item.assemblyPdfUrl, guaranteeDays: item.guaranteeDays, guaranteeLabel: item.guaranteeLabel, guaranteeUrl: item.guaranteeUrl, features: item.features ?? [] });
+    setForm({ name: item.name, slug: item.slug, tags: item.tags ?? [], categoryId: item.categoryId, brandId: item.brandId, description: item.description, useEnvironment: item.useEnvironment, status: item.status, sortOrder: item.sortOrder, isFeatured: item.isFeatured, isNewArrival: item.isNewArrival, isBestSeller: item.isBestSeller, isContractGrade: item.isContractGrade, isCustomizable: item.isCustomizable, isPriceOnRequest: item.isPriceOnRequest, customizableTextNote: item.customizableTextNote, assemblyRequired: item.assemblyRequired, assemblyDuration: item.assemblyDuration, assemblyPdfUrl: item.assemblyPdfUrl, guaranteeDays: item.guaranteeDays, guaranteeLabel: item.guaranteeLabel, guaranteeUrl: item.guaranteeUrl, features: item.features ?? [], careItems: item.careItems?.map(({ title, description, displayOrder }) => ({ title, description, displayOrder })) ?? [], specification: item.specification ?? { specs: [] } });
     setVariants(item.variants.map(variantDraft));
   }, [product.data]);
 
@@ -61,7 +83,6 @@ export default function ProductEditor({ productId }: { productId?: string }) {
     setErrorMessage("");
     try {
       const brandId = form.brandId?.trim() || null;
-      if (brandId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(brandId)) throw new Error("Brand ID must be a valid UUID.");
       const productInput: ProductInput = {
         ...form,
         name: form.name.trim(),
@@ -72,11 +93,19 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         description: form.description?.trim() || null,
         customizableTextNote: form.customizableTextNote?.trim() || null,
         features: (form.features ?? []).map((feature) => feature.trim()).filter(Boolean),
+        careItems: (form.careItems ?? [])
+          .filter((item) => item.title.trim())
+          .map((item, index): ProductCareItemInput => ({
+            title: item.title.trim(),
+            description: item.description?.trim() || null,
+            displayOrder: index,
+          })),
         assemblyDuration: numberOrNull(form.assemblyDuration),
         assemblyPdfUrl: form.assemblyPdfUrl?.trim() || null,
         guaranteeDays: numberOrNull(form.guaranteeDays),
         guaranteeLabel: form.guaranteeLabel?.trim() || null,
         guaranteeUrl: form.guaranteeUrl?.trim() || null,
+        specification: normalizeSpecification(form.specification),
       };
       const variantInputs = variants.map((variant, index): ProductVariantInput => ({
         name: variant.name.trim(),
@@ -97,6 +126,9 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         metaTitle: variant.metaTitle?.trim() || null,
         metaDescription: variant.metaDescription?.trim() || null,
         features: (variant.features ?? []).map((feature) => feature.trim()).filter(Boolean),
+        specification: normalizeSpecification(variant.specification),
+        variantOptions: (variant.variantOptions ?? []).map((option, optionIndex) => ({ attributeId: option.attributeId, attributeOptionId: option.attributeOptionId, displayValue: option.displayValue, displayImage: option.displayImage, sortOrder: optionIndex })),
+        media: (variant.media ?? []).filter((media) => media.url.trim()).map((media, mediaIndex) => ({ url: media.url.trim(), type: media.type ?? "product", alt: media.alt?.trim() || null, isPrimary: mediaIndex === 0, displayOrder: mediaIndex, videoUrl: media.videoUrl ?? null, videoThumbnailUrl: media.videoThumbnailUrl ?? null })),
       }));
 
       let saved: Product;
@@ -118,17 +150,19 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       await showAdminNotice(editMode ? "Product updated" : "Product created", `${saved.name} has been saved.`, "success");
       router.push(`/admin/products/${saved.id}`);
     } catch (error) {
+      if (productId) await product.refetch();
       setErrorMessage(getErrorMessage(error, "The product could not be saved."));
       setSaving(false);
     }
   };
 
-  if ((productId && product.isPending) || categories.isPending) return <div className="flex min-h-72 items-center justify-center gap-3 text-sm text-muted"><LoaderCircle size={19} className="animate-spin" /> Loading product workspace…</div>;
+  if ((productId && product.isPending) || categories.isPending || brands.isPending || attributes.isPending) return <AdminLoadingSkeleton kind="editor" label="Loading product workspace" />;
   if (product.isError) return <LoadError message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />;
+  if (categories.isError || brands.isError || attributes.isError) return <LoadError message={getErrorMessage(categories.error ?? brands.error ?? attributes.error)} onRetry={() => { void categories.refetch(); void brands.refetch(); void attributes.refetch(); }} />;
 
-  const activeContent = tab === "details" ? <ProductDetailsStep value={form} categories={categories.data ?? []} set={setProductField} />
-    : tab === "variants" ? <ProductVariantsStep variants={variants} setVariants={setVariants} />
-    : tab === "content" ? <ProductContentStep features={form.features ?? []} note={form.customizableTextNote ?? ""} onFeatures={(features) => setProductField("features", features)} onNote={(note) => setProductField("customizableTextNote", note)} />
+  const activeContent = tab === "details" ? <ProductDetailsStep value={form} categories={categories.data ?? []} brands={brands.data ?? []} set={setProductField} />
+    : tab === "variants" ? <ProductVariantsStep variants={variants} attributes={attributes.data ?? []} setVariants={setVariants} />
+    : tab === "content" ? <ProductContentStep features={form.features ?? []} note={form.customizableTextNote ?? ""} careItems={form.careItems ?? []} specification={form.specification} onFeatures={(features) => setProductField("features", features)} onNote={(note) => setProductField("customizableTextNote", note)} onCareItems={(careItems) => setProductField("careItems", careItems)} onSpecification={(specification) => setProductField("specification", specification)} />
     : <ProductSeoAssemblyStep value={form} set={(key, next) => setForm((current) => ({ ...current, [key]: next }))} />;
 
   return <form onSubmit={onSubmit} className="space-y-5">

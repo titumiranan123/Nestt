@@ -42,7 +42,7 @@ export class PaymentConfigService {
     };
   }
 
-  async getGatewayCredentials(method: PaymentMethod) {
+  async getGatewayCredentials(method: PaymentMethod, allowDisabled = false) {
     if (method === PaymentMethod.CASH_ON_DELIVERY) {
       throw new ConflictException(
         'Cash on delivery does not use gateway credentials',
@@ -53,7 +53,7 @@ export class PaymentConfigService {
     }
 
     const config = await this.repository.getSsl();
-    if (!config?.status)
+    if (!config || (!config.status && !allowDisabled))
       throw new ConflictException('SSLCommerz is not enabled');
     return {
       storeId: this.crypto.decrypt(config.storeId),

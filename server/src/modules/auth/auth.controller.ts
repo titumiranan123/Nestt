@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -17,10 +18,14 @@ import {
   emailSignupSchema,
   phoneCodeSchema,
   phoneOnlySchema,
+  phonePasswordSchema,
+  phoneResetPasswordSchema,
+  phoneSignupVerifySchema,
   refreshSchema,
   resetPasswordSchema,
   linkEmailVerifySchema,
   verifyEmailSchema,
+  updateProfileSchema,
 } from './dto/auth.schemas.js';
 import type {
   EmailLogin,
@@ -29,6 +34,9 @@ import type {
   LinkEmailVerify,
   PhoneCode,
   PhoneOnly,
+  PhonePassword,
+  PhoneResetPassword,
+  PhoneSignupVerify,
   Refresh,
   ResetPassword,
   VerifyEmail,
@@ -124,6 +132,71 @@ export class AuthController {
     return this.auth.verifyPhone(body.phone, body.code, req.ip ?? 'unknown');
   }
 
+  @Post('customer/phone/signup')
+  @HttpCode(HttpStatus.ACCEPTED)
+  requestCustomerSignup(
+    @Body(new ZodValidationPipe(phoneOnlySchema)) body: PhoneOnly,
+    @Req() req: Request,
+  ) {
+    return this.auth.requestCustomerPhoneSignup(body.phone, req.ip ?? 'unknown');
+  }
+
+  @Post('customer/phone/signup/verify')
+  @HttpCode(HttpStatus.OK)
+  verifyCustomerSignup(
+    @Body(new ZodValidationPipe(phoneSignupVerifySchema)) body: PhoneSignupVerify,
+    @Req() req: Request,
+  ) {
+    return this.auth.verifyCustomerPhoneSignup(
+      body.phone, body.name, body.password, body.code, req.ip ?? 'unknown',
+    );
+  }
+
+  @Post('customer/phone/login')
+  @HttpCode(HttpStatus.OK)
+  loginCustomerPhone(
+    @Body(new ZodValidationPipe(phonePasswordSchema)) body: PhonePassword,
+    @Req() req: Request,
+  ) {
+    return this.auth.loginCustomerPhone(body.phone, body.password, req.ip ?? 'unknown');
+  }
+
+  @Post('customer/phone/login/request-otp')
+  @HttpCode(HttpStatus.ACCEPTED)
+  requestCustomerLoginCode(
+    @Body(new ZodValidationPipe(phoneOnlySchema)) body: PhoneOnly,
+    @Req() req: Request,
+  ) {
+    return this.auth.requestCustomerPhoneCode(body.phone, req.ip ?? 'unknown', 'login');
+  }
+
+  @Post('customer/phone/login/verify-otp')
+  @HttpCode(HttpStatus.OK)
+  verifyCustomerLoginCode(
+    @Body(new ZodValidationPipe(phoneCodeSchema)) body: PhoneCode,
+    @Req() req: Request,
+  ) {
+    return this.auth.verifyCustomerPhoneCode(body.phone, body.code, req.ip ?? 'unknown');
+  }
+
+  @Post('customer/phone/forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  requestCustomerPasswordReset(
+    @Body(new ZodValidationPipe(phoneOnlySchema)) body: PhoneOnly,
+    @Req() req: Request,
+  ) {
+    return this.auth.requestCustomerPhoneCode(body.phone, req.ip ?? 'unknown', 'reset');
+  }
+
+  @Post('customer/phone/reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetCustomerPassword(
+    @Body(new ZodValidationPipe(phoneResetPasswordSchema)) body: PhoneResetPassword,
+    @Req() req: Request,
+  ) {
+    return this.auth.resetCustomerPhonePassword(body.phone, body.code, body.password, req.ip ?? 'unknown');
+  }
+
   @Post('link/email/request')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
@@ -197,5 +270,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@Req() req: AuthRequest) {
     return this.auth.me(req.authUserId);
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  updateProfile(
+    @Req() req: AuthRequest,
+    @Body(new ZodValidationPipe(updateProfileSchema)) body: { name: string },
+  ) {
+    return this.auth.updateProfile(req.authUserId, body.name);
   }
 }

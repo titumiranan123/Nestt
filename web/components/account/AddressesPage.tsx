@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { accountApi, normalizedPhone } from "@/lib/account/api";
 import { useAccount } from "./AccountProvider";
 import { AddressDisplay } from "./OrderDetailsPage";
 import { Badge, EmptyState, Icon, Modal, PageHeading } from "./ui";
-import type { Address } from "@/lib/account/types";
+import type { Address, DeliveryDivision } from "@/lib/account/types";
 
 const emptyAddress: Address = {
   id: "",
+  thanaId: "",
   label: "Home",
   fullName: "",
   phone: "",
@@ -21,7 +23,7 @@ const emptyAddress: Address = {
 };
 
 export function AddressesPage() {
-  const { state, deleteAddress, makeDefault } = useAccount();
+  const { state, busy, deleteAddress, makeDefault } = useAccount();
   const [editing, setEditing] = useState<Address | null>(null);
   const [deleting, setDeleting] = useState<Address | null>(null);
   return (
@@ -89,7 +91,8 @@ export function AddressesPage() {
                   {!address.isDefaultShipping && (
                     <button
                       className="text-link"
-                      onClick={() => makeDefault(address.id)}
+                      disabled={busy}
+                      onClick={() => void makeDefault(address.id)}
                     >
                       Make default
                     </button>
@@ -135,9 +138,8 @@ export function AddressesPage() {
       {deleting && (
         <Modal title="Delete this address?" onClose={() => setDeleting(null)}>
           <p className="dialog-description">
-            This will remove your {deleting.label.toLowerCase()} address from
-            this demo account. Your existing orders keep their original delivery
-            details.
+            Remove your {deleting.label.toLowerCase()} address from your saved addresses?
+            Existing orders keep their original delivery details.
           </p>
           <div className="dialog-actions">
             <button
@@ -148,9 +150,9 @@ export function AddressesPage() {
             </button>
             <button
               className="account-button primary"
-              onClick={() => {
-                deleteAddress(deleting.id);
-                setDeleting(null);
+              disabled={busy}
+              onClick={async () => {
+                if (await deleteAddress(deleting.id)) setDeleting(null);
               }}
             >
               Delete address
@@ -169,20 +171,36 @@ function AddressForm({
   address: Address;
   onClose: () => void;
 }) {
-  const { saveAddress } = useAccount();
+  const { busy, saveAddress } = useAccount();
   const [draft, setDraft] = useState({ ...address });
   const [error, setError] = useState("");
+  const [areas, setAreas] = useState<DeliveryDivision[]>([]);
+  const [locationStatus, setLocationStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const division = areas.find((area) => area.name === draft.region);
+  const district = division?.districts.find((area) => area.name === draft.city);
+  const thana = district?.thanas.find((area) => area.id === draft.thanaId);
+
+  useEffect(() => {
+    let active = true;
+    void accountApi.deliveryAreas().then((response) => {
+      if (active) { setAreas(response); setLocationStatus("ready"); }
+    }).catch(() => { if (active) setLocationStatus("error"); });
+    return () => { active = false; };
+  }, [attempt]);
+
   const update = (key: keyof Address, value: string | boolean) =>
     setDraft((d) => ({ ...d, [key]: value }));
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    const phone = draft.phone.replace(/[\s()-]/g, "");
+    setError("");
+    const phone = normalizedPhone(draft.phone);
     if (!/^\+?\d{7,15}$/.test(phone)) {
       setError("Enter a valid phone number, including your country code.");
       return;
     }
     if (
-      ![
+      !thana || ![
         draft.label,
         draft.fullName,
         draft.region,
@@ -194,9 +212,8 @@ function AddressForm({
       setError("Please complete every required field.");
       return;
     }
-    saveAddress({
+    if (await saveAddress({
       ...draft,
-      id: draft.id || crypto.randomUUID(),
       label: draft.label.trim(),
       fullName: draft.fullName.trim(),
       phone,
@@ -205,8 +222,7 @@ function AddressForm({
       area: draft.area.trim(),
       addressLine: draft.addressLine.trim(),
       postalCode: draft.postalCode.trim(),
-    });
-    onClose();
+    })) onClose();
   }
   return (
     <Modal
@@ -261,50 +277,65 @@ function AddressForm({
           />
           <small>We’ll use this number for delivery updates.</small>
         </label>
+        {locationStatus === "loading" && <p className="account-note" role="status">Loading delivery areas…</p>}
+        {locationStatus === "error" && <p className="account-alert" role="alert">
+          Could not load delivery areas.{" "}
+          <button type="button" className="text-link" onClick={() => {
+            setLocationStatus("loading");
+            setAttempt((value) => value + 1);
+          }}>Try again</button>
+        </p>}
         <div className="form-row">
           <label className="account-field">
             Division *
             <select
               required
               autoComplete="shipping address-level1"
-              value={draft.region}
-              onChange={(e) => update("region", e.target.value)}
+              disabled={locationStatus !== "ready"}
+              value={division?.name ?? ""}
+              onChange={(e) => setDraft((current) => ({
+                ...current, region: e.target.value, city: "", area: "", thanaId: "",
+              }))}
             >
               <option value="">Select division</option>
-              {[
-                "Barishal",
-                "Chattogram",
-                "Dhaka",
-                "Khulna",
-                "Mymensingh",
-                "Rajshahi",
-                "Rangpur",
-                "Sylhet",
-              ].map((r) => (
-                <option key={r}>{r}</option>
+              {areas.map((area) => (
+                <option key={area.id}>{area.name}</option>
               ))}
             </select>
           </label>
           <label className="account-field">
             District / City *
-            <input
+            <select
               required
               autoComplete="shipping address-level2"
-              maxLength={100}
-              value={draft.city}
-              onChange={(e) => update("city", e.target.value)}
-            />
+              disabled={!division}
+              value={district?.name ?? ""}
+              onChange={(e) => setDraft((current) => ({
+                ...current, city: e.target.value, area: "", thanaId: "",
+              }))}
+            >
+              <option value="">Select district</option>
+              {division?.districts.map((area) => <option key={area.id}>{area.name}</option>)}
+            </select>
           </label>
         </div>
         <label className="account-field">
           Area / Thana *
-          <input
+          <select
             required
             autoComplete="shipping address-level3"
-            maxLength={100}
-            value={draft.area}
-            onChange={(e) => update("area", e.target.value)}
-          />
+            disabled={!district}
+            value={thana?.id ?? ""}
+            onChange={(e) => {
+              const selected = district?.thanas.find((area) => area.id === e.target.value);
+              setDraft((current) => ({ ...current, area: selected?.name ?? "", thanaId: selected?.id ?? "" }));
+            }}
+          >
+            <option value="">Select thana</option>
+            {district?.thanas.map((area) => (
+              <option value={area.id} key={area.id}>{area.name}{!area.isDeliverable ? " (delivery unavailable)" : ""}</option>
+            ))}
+          </select>
         </label>
         <label className="account-field">
           Address line *
@@ -349,8 +380,8 @@ function AddressForm({
           <button className="account-button" type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="account-button primary" type="submit">
-            Save address
+          <button className="account-button primary" type="submit" disabled={busy || !thana}>
+            {busy ? "Saving…" : "Save address"}
           </button>
         </div>
       </form>

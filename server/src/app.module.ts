@@ -16,6 +16,7 @@ import { ProductsModule } from './modules/products/products.module.js';
 import { CartModule } from './modules/cart/cart.module.js';
 import { ARModule } from './modules/ar/ar.module.js';
 import { AddressesModule } from './modules/addresses/addresses.module.js';
+import { WishlistModule } from './modules/wishlist/wishlist.module.js';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { AddressesModule } from './modules/addresses/addresses.module.js';
     CartModule,
     ARModule,
     AddressesModule,
+    WishlistModule,
   ],
   controllers: [AppController],
   providers: [AppService],

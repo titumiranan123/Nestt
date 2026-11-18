@@ -17,14 +17,17 @@ function validEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
     SMTP_USER: 'user',
     SMTP_PASSWORD: 'password',
     MAIL_FROM: 'Nestt <noreply@example.com>',
-    TWILIO_ACCOUNT_SID: 'AC123456789',
-    TWILIO_AUTH_TOKEN: 'token',
-    TWILIO_FROM: '+15551234567',
     ...overrides,
   };
 }
 
 describe('validateEnvironment', () => {
+  it('accepts the Resend password setting and optional SMS config', () => {
+    const config = validateEnvironment(validEnv({ SMTP_PASSWORD: undefined, SMTP_PASS: 'smtp-test-key' }));
+    expect(config.SMTP_PASSWORD).toBe('smtp-test-key');
+    expect(() => validateEnvironment(validEnv({ SMS_API_URL: 'https://sms.example.test' }))).toThrow('Set the SMS gateway URL');
+  });
+
   it('applies development defaults and transforms validated values', () => {
     const config = validateEnvironment(
       validEnv({ NODE_ENV: undefined, PORT: undefined }),

@@ -5,6 +5,7 @@ export type CatalogRecord = {
   isPublished: boolean;
   description?: string;
   parent?: string;
+  parentId?: string | null;
   productCardMode?: "One product" | "One variant";
   sortOrder?: number;
   isPopular?: boolean;

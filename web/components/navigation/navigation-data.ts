@@ -10,12 +10,12 @@ export type NavigationItem = {
 
 export const navigationItems: NavigationItem[] = [
   {
-    id: "products", label: "Products", href: "/#products",
+    id: "products", label: "Products", href: "/products",
     groups: [
       { title: "Shop furniture", links: [
-        { label: "Sofas & sectionals", href: "/#products" }, { label: "Beds & bed frames", href: "/#products" },
-        { label: "Dining & coffee tables", href: "/#products" }, { label: "Chairs & recliners", href: "/#products" },
-        { label: "Storage & sideboards", href: "/#products" }, { label: "Decor & accessories", href: "/#products" },
+        { label: "Sofas & sectionals", href: "/products?category=sofas-sectionals" }, { label: "Beds & bed frames", href: "/products?category=beds-bedroom" },
+        { label: "Dining & coffee tables", href: "/products?category=tables" }, { label: "Chairs & recliners", href: "/products?category=chairs-ottomans" },
+        { label: "Storage & sideboards", href: "/products?category=storage-cabinets" }, { label: "Decor & accessories", href: "/products?category=rugs-decor" },
       ] },
       { title: "Discover more", links: [
         { label: "New arrivals", href: "/#fresh-arrivals", description: "The latest pieces for your home" },
@@ -23,7 +23,7 @@ export const navigationItems: NavigationItem[] = [
         { label: "Shop by room", href: "/#rooms", description: "Find pieces that work together" },
       ] },
     ],
-    feature: { image: "/assets/hero/quality-living-room.webp", eyebrow: "Made for everyday living", title: "Make room for comfort.", description: "Thoughtful pieces. A home that feels like you.", cta: "Explore the collection", href: "/#recommended" },
+    feature: { image: "/assets/hero/quality-living-room.webp", eyebrow: "Made for everyday living", title: "Make room for comfort.", description: "Thoughtful pieces. A home that feels like you.", cta: "Explore the collection", href: "/products" },
   },
   {
     id: "rooms", label: "Rooms", href: "/#rooms",

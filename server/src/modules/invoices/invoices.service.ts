@@ -49,7 +49,7 @@ export class InvoicesService {
       customerName: order.billingSameAsShipping
         ? order.shippingName
         : (order.billingName ?? order.shippingName),
-      customerEmail: order.user?.email ?? order.guestEmail ?? '',
+      customerEmail: order.contactEmail ?? order.user?.email ?? order.guestEmail ?? '',
       customerPhone: order.billingSameAsShipping
         ? order.shippingPhone
         : (order.billingPhone ?? order.shippingPhone),

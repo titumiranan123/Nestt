@@ -5,7 +5,7 @@ export function MobileMenu({ onNavigate }: { onNavigate: () => void }) {
   const [expanded, setExpanded] = useState<string | null>("products");
 
   return (
-    <nav id="mobile-navigation" aria-label="Mobile navigation" className="absolute inset-x-0 top-full max-h-[calc(100dvh-76px)] overflow-y-auto overscroll-contain border-t border-[#eae8e4] bg-white px-5 pb-6 text-[#252522] shadow-xl xl:hidden">
+    <nav id="mobile-navigation" aria-label="Mobile navigation" className="absolute inset-x-0 top-full max-h-[calc(100dvh-65px)] overflow-y-auto overscroll-contain border-t border-[#eae8e4] bg-white px-5 pb-6 text-[#252522] shadow-xl xl:hidden">
       {navigationItems.map((item) => (
         <div key={item.id} className="border-b border-[#eeece8]">
           <button type="button" id={`mobile-trigger-${item.id}`} aria-expanded={expanded === item.id} aria-controls={`mobile-group-${item.id}`} onClick={(event) => { const trigger = event.currentTarget; setExpanded(expanded === item.id ? null : item.id); requestAnimationFrame(() => trigger.scrollIntoView({ block: "nearest", behavior: "instant" })); }} className="flex w-full cursor-pointer items-center justify-between gap-4 py-5 text-left text-base font-medium focus-visible:outline-2 focus-visible:outline-[#f4131b]">

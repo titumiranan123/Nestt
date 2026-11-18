@@ -3,9 +3,10 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, User, UserStatus } from '@prisma/client';
+import { Prisma, RoleEnum, User, UserStatus } from '@prisma/client';
 import {
   isValidPhoneNumber,
   parsePhoneNumberFromString,
@@ -192,6 +193,111 @@ export class AuthService {
     return { user: this.publicUser(user), ...(await this.tokens.issue(user)) };
   }
 
+  async findOrCreateCheckoutCustomer(phoneInput: string, name: string): Promise<User> {
+    const phone = this.normalizePhone(phoneInput);
+    let user = await this.repo.userByPhone(phone);
+    if (!user) user = await this.repo.createCheckoutPhoneCustomer(phone, name.trim());
+    if (!user || user.role !== RoleEnum.CUSTOMER || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('This phone number cannot be used for customer checkout.');
+    }
+    if (!user.isPhoneVerified || !user.phoneVerifiedAt) {
+      user = await this.repo.markPhoneVerified(user.id);
+    }
+    return user;
+  }
+
+  async issueCheckoutSession(userId: string) {
+    const user = await this.repo.userById(userId);
+    if (!user || user.role !== RoleEnum.CUSTOMER || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Customer account is unavailable.');
+    }
+    return this.tokens.issue(user);
+  }
+
+  async requestCustomerPhoneSignup(input: string, ip: string) {
+    const phone = this.normalizePhone(input);
+    this.otp.assertPhoneDelivery();
+    await this.otp.enforceLimit('customer-phone-signup-send', phone, ip);
+    if (!(await this.repo.userByPhone(phone))) {
+      await this.sendPublicCustomerSms(ChallengePurpose.CUSTOMER_PHONE_SIGNUP, phone);
+    }
+    return { message: 'If eligible, a verification code has been sent.' };
+  }
+
+  async verifyCustomerPhoneSignup(input: string, name: string, password: string, code: string, ip: string) {
+    const phone = this.normalizePhone(input);
+    await this.otp.enforceLimit('customer-phone-signup-check', phone, ip, true);
+    const passwordHash = await this.crypto.hashPassword(password);
+    const user = await this.repo.createVerifiedPhoneCustomer(
+      phone, name, this.otp.hash(ChallengePurpose.CUSTOMER_PHONE_SIGNUP, phone, code), passwordHash,
+    );
+    if (!user) throw new UnauthorizedException('Invalid or expired signup code');
+    return { user: this.publicUser(user), ...(await this.tokens.issue(user)) };
+  }
+
+  async loginCustomerPhone(input: string, password: string, ip: string) {
+    const phone = this.normalizePhone(input);
+    await this.otp.enforceLimit('customer-phone-password-login', phone, ip, true);
+    const user = await this.verifiedPhoneCustomer(phone);
+    const valid = user?.passwordHash
+      ? await this.crypto.verifyPassword(user.passwordHash, password)
+      : (await this.crypto.hashPassword(password), false);
+    if (!user || !valid) throw new UnauthorizedException('Invalid phone number or password');
+    return { user: this.publicUser(user), ...(await this.tokens.issue(user)) };
+  }
+
+  async requestCustomerPhoneCode(input: string, ip: string, purpose: 'login' | 'reset') {
+    const phone = this.normalizePhone(input);
+    this.otp.assertPhoneDelivery();
+    await this.otp.enforceLimit(`customer-phone-${purpose}-send`, phone, ip);
+    const user = await this.verifiedPhoneCustomer(phone);
+    if (user) {
+      const challenge = purpose === 'login' ? ChallengePurpose.CUSTOMER_PHONE_LOGIN : ChallengePurpose.RESET_PHONE_PASSWORD;
+      await this.sendPublicCustomerSms(challenge, phone, user.id);
+    }
+    return { message: 'If the account is eligible, a code has been sent.' };
+  }
+
+  async verifyCustomerPhoneCode(input: string, code: string, ip: string) {
+    const phone = this.normalizePhone(input);
+    await this.otp.enforceLimit('customer-phone-login-check', phone, ip, true);
+    const current = await this.verifiedPhoneCustomer(phone);
+    if (!current) throw new UnauthorizedException('Invalid or expired code');
+    const user = await this.repo.verifyCustomerPhoneLogin(
+      current.id, phone, this.otp.hash(ChallengePurpose.CUSTOMER_PHONE_LOGIN, phone, code),
+    );
+    if (!user) throw new UnauthorizedException('Invalid or expired code');
+    return { user: this.publicUser(user), ...(await this.tokens.issue(user)) };
+  }
+
+  async resetCustomerPhonePassword(input: string, code: string, password: string, ip: string) {
+    const phone = this.normalizePhone(input);
+    await this.otp.enforceLimit('customer-phone-reset-check', phone, ip, true);
+    const passwordHash = await this.crypto.hashPassword(password);
+    const user = await this.verifiedPhoneCustomer(phone);
+    const updated = user && await this.repo.resetCustomerPhonePassword(
+      user.id, phone, this.otp.hash(ChallengePurpose.RESET_PHONE_PASSWORD, phone, code), passwordHash, user.authVersion,
+    );
+    if (!updated) throw new UnauthorizedException('Invalid or expired reset code');
+    return { message: 'Password updated. Sign in again.' };
+  }
+
+  private async verifiedPhoneCustomer(phone: string) {
+    const user = await this.repo.userByPhone(phone);
+    return user?.phoneVerifiedAt && user.role === RoleEnum.CUSTOMER && user.status === UserStatus.ACTIVE
+      ? user
+      : null;
+  }
+
+  private async sendPublicCustomerSms(purpose: ChallengePurpose, phone: string, userId?: string) {
+    try {
+      await this.otp.sendChallenge(purpose, phone, userId);
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      this.logger.warn('Public customer SMS delivery failed');
+    }
+  }
+
   async requestLinkEmail(userId: string, email: string, ip: string) {
     await this.otp.enforceLimit('link-email-send', email, ip);
     const [user, owner] = await Promise.all([
@@ -272,6 +378,10 @@ export class AuthService {
         permissions: await this.repo.permissionsForUser(user.id, user.role),
       },
     };
+  }
+
+  async updateProfile(userId: string, name: string) {
+    return { user: this.publicUser(await this.repo.updateName(userId, name)) };
   }
 
   refresh(token: string) {

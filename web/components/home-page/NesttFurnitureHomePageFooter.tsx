@@ -1,9 +1,24 @@
 import Image from "next/image";
 
 const footerGroups = [
-  { title: "Spatial Suites", links: ["Living Room", "Bedroom", "Dining Room", "Home Office"] },
-  { title: "Experience Centers", links: ["Virtual Showroom", "Find a Showroom", "Style Quiz", "Book a Consultation"] },
-  { title: "Nestt Monograph", links: ["Our Story", "Journal", "Care Guide", "Contact Us"] },
+  { title: "Spatial Suites", links: [
+    { label: "Living Room", href: "/products?category=sofas-sectionals" },
+    { label: "Bedroom", href: "/products?category=beds-bedroom" },
+    { label: "Dining Room", href: "/products?category=tables" },
+    { label: "Home Office", href: "/products?category=chairs-ottomans" },
+  ] },
+  { title: "Experience Centers", links: [
+    { label: "Virtual Showroom", href: "/#showrooms" },
+    { label: "Find a Showroom", href: "/#showrooms" },
+    { label: "Style Quiz", href: "/#more" },
+    { label: "Book a Consultation", href: "mailto:hello@nestt.com" },
+  ] },
+  { title: "Nestt Monograph", links: [
+    { label: "Our Story", href: "/#more" },
+    { label: "Journal", href: "/#inspiration" },
+    { label: "Care Guide", href: "/#inspiration" },
+    { label: "Contact Us", href: "mailto:hello@nestt.com" },
+  ] },
 ];
 
 export function NesttFurnitureHomePageFooter() {
@@ -12,7 +27,7 @@ export function NesttFurnitureHomePageFooter() {
       <div className="mx-auto flex min-h-[299.5px] max-w-[1392px] flex-col justify-between">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-6 lg:gap-6">
           <div className="sm:col-span-2 lg:col-span-2 lg:pr-14">
-            <a className="inline-flex h-9 w-[136px] cursor-pointer" href="#home" aria-label="Nestt home">
+            <a className="inline-flex h-9 w-[136px] cursor-pointer" href="/" aria-label="Nestt home">
               <Image src="/assets/figma-home/hero-logo.png" alt="Nestt" width={136} height={36} className="h-9 w-[136px] object-cover" />
             </a>
             <p className="mt-4 max-w-[300px] text-[14px] leading-5 text-white/60">Thoughtful furniture, considered spaces, and details made for everyday living.</p>
@@ -23,7 +38,7 @@ export function NesttFurnitureHomePageFooter() {
             <div key={group.title}>
               <h3 className="text-[12px] font-semibold uppercase leading-5 tracking-[0.12em] text-white/65">{group.title}</h3>
               <div className="mt-4 grid gap-3">
-                {group.links.map((link) => <a className="cursor-pointer text-[14px] leading-5 text-white/75 hover:text-white" href="#home" key={link}>{link}</a>)}
+                {group.links.map((link) => <a className="cursor-pointer text-[14px] leading-5 text-white/75 hover:text-white" href={link.href} key={link.label}>{link.label}</a>)}
               </div>
             </div>
           ))}

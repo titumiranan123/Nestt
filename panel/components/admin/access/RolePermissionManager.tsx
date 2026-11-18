@@ -11,6 +11,7 @@ import { PermissionMatrix } from "@/components/admin/access/PermissionMatrix";
 import { RoleCards } from "@/components/admin/access/RoleCards";
 import { RoleSummaryPanel } from "@/components/admin/access/RoleSummaryPanel";
 import { RolePermissionsHeader } from "@/components/admin/access/RolePermissionsHeader";
+import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
 
 type PermissionMap = Record<DemoRole, string[]>;
 const emptyPermissionMap = (): PermissionMap => ({ SUPER_ADMIN: [], ADMIN: [], MANAGER: [], SUPPORT: [] });
@@ -87,7 +88,7 @@ export function RolePermissionManager() {
   };
 
   if (rolesQuery.isPending) {
-    return <div className="rounded-xl border border-gray-200 bg-white p-8 text-sm text-gray-500">Loading role permissions…</div>;
+    return <AdminLoadingSkeleton kind="page" label="Loading role permissions" />;
   }
   if (rolesQuery.isError || !rolesQuery.data) {
     return <section className="rounded-xl border border-red-200 bg-white p-6"><h1 className="text-lg font-bold text-gray-900">Could not load access control</h1><p className="mt-2 text-sm text-gray-600">Check that permissions are seeded and your account has access.</p><button type="button" onClick={() => void rolesQuery.refetch()} className="mt-4 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white">Try again</button></section>;

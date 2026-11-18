@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -11,12 +12,16 @@ import {
   TransactionStatus,
   TransactionSource,
 } from '@prisma/client';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import type {
   DeliveryAreaInput,
+  UpdateDeliveryAreaInput,
   DeliveryZoneConfigInput,
+  CreateAdminOrder,
   CreateOrder,
   CreateOrderRemark,
   ListOrders,
+  QuoteOrder,
   RequestReturn,
   UpdateOrderStatus,
   UpdatePaymentStatus,
@@ -30,6 +35,7 @@ import {
 } from '../../common/utils/pagination.js';
 
 const orderDetails = {
+  user: { select: { id: true, name: true, email: true, phone: true } },
   items: true,
   payment: { include: { transactions: { orderBy: { createdAt: 'desc' as const } } } },
   statusHistories: { orderBy: { createdAt: 'asc' as const } },
@@ -37,32 +43,128 @@ const orderDetails = {
   remarks: { orderBy: { createdAt: 'desc' as const } },
 };
 
+const gatewayOrder = {
+  payment: { include: {
+    transactions: { where: { source: TransactionSource.SSL_COMMERZ }, take: 1, orderBy: { createdAt: 'asc' as const } },
+  } },
+} satisfies Prisma.OrderInclude;
+
+export type GatewayOrder = Prisma.OrderGetPayload<{ include: typeof gatewayOrder }>;
+export type GatewaySession = { gatewayUrl: string; sessionKey: string; sandbox: boolean };
+export type GatewayResult = 'success' | 'failed' | 'cancelled' | 'pending';
+
+export function gatewayOrderResult(order: Pick<GatewayOrder, 'paymentStatus' | 'status' | 'cancelReason'>): GatewayResult {
+  if (order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIALLY_REFUNDED' || order.paymentStatus === 'REFUNDED') return 'success';
+  if (order.cancelReason === 'SSLCommerz payment cancelled') return 'cancelled';
+  if (order.paymentStatus === 'FAILED') return 'failed';
+  if (order.status === 'CANCELLED') return 'cancelled';
+  return 'pending';
+}
+
+export function readGatewaySession(metadata: Prisma.JsonValue): GatewaySession | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const { gatewayUrl, sessionKey, sandbox } = metadata;
+  return typeof gatewayUrl === 'string' && typeof sessionKey === 'string' && typeof sandbox === 'boolean'
+    ? { gatewayUrl, sessionKey, sandbox } : null;
+}
+
 @Injectable()
 export class OrdersRepository {
   constructor(private readonly db: PrismaService) {}
 
-  createCheckout(userId: string, orderCode: string, input: CreateOrder) {
-    return this.db.$transaction(async (tx) => {
-      const variants = await tx.productVariant.findMany({
-        where: {
-          id: { in: input.items.map((item) => item.variantId) },
-          status: 'active',
-          deletedAt: null,
-          product: { is: { status: 'active', deletedAt: null } },
-        },
-        include: {
-          product: true,
-          media: {
-            orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
-            take: 1,
-          },
-        },
-      });
-      if (variants.length !== input.items.length) {
-        throw new NotFoundException('One or more products are unavailable');
-      }
+  async findCheckout(userId: string, orderCode: string, fingerprint?: string) {
+    const order = await this.db.order.findUnique({
+      where: { orderCode, userId },
+      select: { id: true, orderCode: true, metadata: true },
+    });
+    if (!order) return null;
+    if (!fingerprint) return order;
+    const metadata = order.metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) || metadata.checkoutFingerprint !== fingerprint) {
+      throw new ConflictException('This checkout has already been submitted with different details');
+    }
+    return order;
+  }
 
-      const savedAddress = input.addressId
+  async quoteCheckout(userId: string | null | undefined, input: QuoteOrder) {
+    const address = input.addressId
+      ? userId ? await this.db.address.findFirst({ where: { id: input.addressId, userId } }) : null
+      : null;
+    if (input.addressId && !address) throw new NotFoundException('Shipping address not found');
+    const { items, subTotal, shippingCharge, totalAmount } = await this.priceCheckout(
+      this.db, input.items, address?.thanaId ?? input.thanaId,
+    );
+    for (const item of items) {
+      if (item.variant.stockQty < item.quantity) {
+        throw new ConflictException(`Insufficient stock for ${item.variant.product.name}`);
+      }
+    }
+    return {
+      subtotal: subTotal,
+      shippingCharge,
+      total: totalAmount,
+      items: items.map(({ variantId, total }) => ({ variantId, lineTotal: total })),
+    };
+  }
+
+  private async priceCheckout(
+    tx: Prisma.TransactionClient,
+    requested: CreateOrder['items'],
+    thanaId?: string | null,
+  ) {
+    if (!thanaId) throw new ConflictException('Select a delivery area for this saved address before checkout');
+    const thana = await tx.thana.findUnique({
+      where: { id: thanaId },
+      include: { district: { include: { division: true } } },
+    });
+    if (!thana?.isDeliverable) throw new ConflictException('Delivery is not available for this area');
+
+    const variants = await tx.productVariant.findMany({
+      where: {
+        id: { in: requested.map((item) => item.variantId) },
+        status: 'active',
+        deletedAt: null,
+        product: { is: { status: 'active', deletedAt: null } },
+      },
+      include: {
+        product: true,
+        media: { orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+      },
+    });
+    const variantsById = new Map(variants.map((variant) => [variant.id, variant]));
+    const items = requested.map((item) => {
+      const variant = variantsById.get(item.variantId);
+      if (!variant) throw new NotFoundException('One or more products are unavailable');
+      if (variant.product.isPriceOnRequest) throw new ConflictException(`${variant.product.name} is available by price request`);
+      if (variant.stockStatus === 'OUT_OF_STOCK' || variant.stockStatus === 'PREORDER') {
+        throw new ConflictException(`${variant.product.name} is currently unavailable`);
+      }
+      return { ...item, variant, total: variant.price.mul(item.quantity) };
+    });
+    const subTotal = items.reduce((sum, item) => sum.add(item.total), new Prisma.Decimal(0));
+    const zoneConfig = await tx.deliveryZoneConfig.findUnique({ where: { zone: thana.deliveryZone } });
+    const shippingCharge = resolveDeliveryFee(thana, zoneConfig, subTotal).fee;
+    return { items, thana, subTotal, shippingCharge, totalAmount: subTotal.add(shippingCharge) };
+  }
+
+  async checkoutPhone(userId: string | null | undefined, input: CreateOrder) {
+    const saved = input.addressId
+      ? userId ? await this.db.address.findFirst({ where: { id: input.addressId, userId }, select: { phone: true } }) : null
+      : null;
+    const phone = saved?.phone ?? input.shippingAddress?.phone;
+    if (!phone) throw new NotFoundException('Shipping address not found');
+    return this.validCheckoutPhone(phone);
+  }
+
+  private validCheckoutPhone(phone: string) {
+    const parsed = parsePhoneNumberFromString(phone, 'BD');
+    if (!parsed?.isValid()) throw new BadRequestException('Enter a valid phone number for this order');
+    return parsed.number;
+  }
+
+  createCheckout(userId: string, orderCode: string, input: CreateOrder, fingerprint?: string, verifiedPhone?: string) {
+    return this.db.$transaction(async (tx) => {
+      const savedAddress = input.addressId && userId
         ? await tx.address.findFirst({ where: { id: input.addressId, userId } })
         : null;
       const address = savedAddress
@@ -78,38 +180,14 @@ export class OrdersRepository {
           }
         : input.shippingAddress;
       if (!address) throw new NotFoundException('Shipping address not found');
-      if (!address.thanaId) {
-        throw new ConflictException(
-          'Select a delivery area for this saved address before checkout',
-        );
+      const contactPhone = input.contactEmail ? this.validCheckoutPhone(address.phone) : address.phone;
+      if (verifiedPhone && contactPhone !== verifiedPhone) {
+        throw new ConflictException('Shipping phone changed. Verify the new phone before placing this order.');
       }
-
-      const thana = await tx.thana.findUnique({
-        where: { id: address.thanaId },
-        include: { district: { include: { division: true } } },
-      });
-      if (!thana?.isDeliverable)
-        throw new ConflictException('Delivery is not available for this area');
-
-      const variantsById = new Map(
-        variants.map((variant) => [variant.id, variant]),
-      );
-      const items = input.items.map((item) => {
-        const variant = variantsById.get(item.variantId);
-        if (!variant)
-          throw new NotFoundException('One or more products are unavailable');
-        return { ...item, variant, total: variant.price.mul(item.quantity) };
-      });
-      const subTotal = items.reduce(
-        (sum, item) => sum.add(item.total),
-        new Prisma.Decimal(0),
-      );
-      const zoneConfig = await tx.deliveryZoneConfig.findUnique({
-        where: { zone: thana.deliveryZone },
-      });
-      const deliveryFee = resolveDeliveryFee(thana, zoneConfig, subTotal);
-      const shippingCharge = deliveryFee.fee;
-      const totalAmount = subTotal.add(shippingCharge);
+      const { items, thana, subTotal, shippingCharge, totalAmount } = await this.priceCheckout(tx, input.items, address.thanaId);
+      if (input.expectedTotal !== undefined && !totalAmount.equals(input.expectedTotal)) {
+        throw new ConflictException('The order total has changed. Review the updated amount and try again.');
+      }
 
       const reservedVariantIds = await this.reserveStock(tx, items);
       if (reservedVariantIds.length !== items.length) {
@@ -124,7 +202,7 @@ export class OrdersRepository {
 
       const shipping = {
         name: address.name,
-        phone: address.phone,
+        phone: contactPhone,
         region: thana.district.division.name,
         city: thana.district.name,
         area: thana.name,
@@ -153,7 +231,10 @@ export class OrdersRepository {
       return tx.order.create({
         data: {
           orderCode,
+          ...(fingerprint && { metadata: { checkoutFingerprint: fingerprint } }),
           userId,
+          guestPhone: null,
+          guestEmail: null,
           addressId: input.addressId,
           shippingThanaId: thana.id,
           subTotal,
@@ -168,6 +249,9 @@ export class OrdersRepository {
           orderSource: 'ONLINE',
           shippingName: shipping.name,
           shippingPhone: shipping.phone,
+          contactEmail: input.contactEmail,
+          orderPhoneVerifiedAt: verifiedPhone ? new Date() : undefined,
+          emergencyContactPhone: input.emergencyContactPhone ?? null,
           shippingRegion: shipping.region,
           shippingCity: shipping.city,
           shippingArea: shipping.area,
@@ -243,11 +327,13 @@ export class OrdersRepository {
         where,
         include: {
           items: true,
+          payment: { select: { method: true } },
           statusHistories: {
             where: { isPublic: true },
             orderBy: { createdAt: 'asc' },
           },
         },
+        omit: { metadata: true, guestSessionId: true },
         orderBy: { createdAt: 'desc' },
         skip: paginationOffset(query.page, query.pageSize),
         take: query.pageSize,
@@ -263,7 +349,9 @@ export class OrdersRepository {
     return this.db.order.findFirst({
       where: { id, userId },
       include: {
-        ...orderDetails,
+        items: true,
+        payment: { select: { method: true } },
+        returns: { orderBy: { createdAt: 'desc' } },
         statusHistories: {
           where: { isPublic: true },
           orderBy: { createdAt: 'asc' },
@@ -273,6 +361,7 @@ export class OrdersRepository {
           orderBy: { createdAt: 'desc' },
         },
       },
+      omit: { metadata: true, guestSessionId: true },
     });
   }
 
@@ -319,22 +408,179 @@ export class OrdersRepository {
     });
   }
 
-  listAll(query: ListOrders) {
-    const where = query.status ? { status: query.status } : {};
+  createAdmin(orderId: string, actorId: string, input: CreateAdminOrder) {
     return this.db.$transaction(async (tx) => {
-      const [orders, total] = await Promise.all([
+      const variants = await tx.productVariant.findMany({
+        where: {
+          id: { in: input.items.map(({ variantId }) => variantId) },
+          status: 'active',
+          deletedAt: null,
+          product: { is: { status: 'active', deletedAt: null } },
+        },
+        include: {
+          product: true,
+          media: { orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+        },
+      });
+      if (variants.length !== input.items.length) {
+        throw new NotFoundException('One or more products are unavailable');
+      }
+
+      const isPickup = input.fulfillmentType === 'PICKUP';
+      const thana = isPickup ? null : await tx.thana.findUnique({
+        where: { id: input.shippingThanaId! },
+        include: { district: { include: { division: true } } },
+      });
+      if (!isPickup && !thana) throw new NotFoundException('Delivery area not found');
+      if (thana && !thana.isDeliverable) throw new ConflictException('Delivery is not available for this area');
+
+      const variantsById = new Map(variants.map((variant) => [variant.id, variant]));
+      const items = input.items.map((item) => {
+        const variant = variantsById.get(item.variantId);
+        if (!variant) throw new NotFoundException('One or more products are unavailable');
+        return { ...item, variant, total: variant.price.mul(item.quantity) };
+      });
+      const subTotal = items.reduce((sum, item) => sum.add(item.total), new Prisma.Decimal(0));
+      const discountAmount = new Prisma.Decimal(input.discountAmount);
+      if (discountAmount.greaterThan(subTotal)) {
+        throw new ConflictException('Discount cannot exceed the item subtotal');
+      }
+      const zoneConfig = thana ? await tx.deliveryZoneConfig.findUnique({ where: { zone: thana.deliveryZone } }) : null;
+      const shippingCharge = thana ? resolveDeliveryFee(thana, zoneConfig, subTotal).fee : new Prisma.Decimal(0);
+      const totalAmount = subTotal.add(shippingCharge).sub(discountAmount);
+      const reservedVariantIds = await this.reserveStock(tx, items);
+      if (reservedVariantIds.length !== items.length) {
+        const reservedIds = new Set(reservedVariantIds);
+        const unavailableItem = items.find(({ variant }) => !reservedIds.has(variant.id));
+        throw new ConflictException(`Insufficient stock for ${unavailableItem?.variant.product.name ?? 'product'}`);
+      }
+
+      const paymentStatus = input.paymentStatus;
+      const orderStatus = OrderStatus.PENDING;
+      const paymentTransaction = paymentStatus === PaymentStatus.PAID
+        ? {
+            create: {
+              source: input.paymentMethod === 'CASH_ON_DELIVERY' ? TransactionSource.COD_COLLECTION : TransactionSource.ADMIN_ADJUSTMENT,
+              status: TransactionStatus.SUCCESS,
+              amount: totalAmount,
+              currency: 'BDT',
+              metadata: { source: 'admin', actorId, manualReference: input.paymentReference ?? null },
+            },
+          }
+        : undefined;
+
+      return tx.order.create({
+        data: {
+          orderCode: orderId,
+          userId: null,
+          addressId: null,
+          shippingThanaId: thana?.id ?? null,
+          subTotal,
+          shippingCharge,
+          discountAmount,
+          totalAmount,
+          status: orderStatus,
+          paymentStatus,
+          orderSource: input.source,
+          shippingName: input.customerName,
+          shippingPhone: input.phone,
+          emergencyContactPhone: input.emergencyContactPhone ?? null,
+          shippingRegion: thana?.district.division.name ?? 'Store pickup',
+          shippingCity: thana?.district.name ?? 'Store pickup',
+          shippingArea: thana?.name ?? 'Store pickup',
+          shippingAddress: input.shippingAddress ?? 'Store pickup',
+          shippingPostalCode: input.shippingPostalCode ?? null,
+          guestPhone: input.phone,
+          guestEmail: input.email ?? null,
+          billingSameAsShipping: true,
+          billingName: input.customerName,
+          billingPhone: input.phone,
+          billingRegion: thana?.district.division.name ?? 'Store pickup',
+          billingCity: thana?.district.name ?? 'Store pickup',
+          billingArea: thana?.name ?? 'Store pickup',
+          billingAddress: input.shippingAddress ?? 'Store pickup',
+          billingPostalCode: input.shippingPostalCode ?? null,
+          notes: input.notes ?? null,
+          items: {
+            create: items.map((item) => ({
+              variantId: item.variant.id,
+              productName: item.variant.product.name,
+              variantName: item.variant.name,
+              sku: item.variant.sku,
+              image: item.variant.media[0]?.url ?? null,
+              quantity: item.quantity,
+              unitPrice: item.variant.price,
+              totalPrice: item.total,
+              stockReserved: true,
+            })),
+          },
+          payment: {
+            create: {
+              method: input.paymentMethod,
+              status: paymentStatus,
+              amount: totalAmount,
+              currency: 'BDT',
+              ...(paymentTransaction ? { transactions: paymentTransaction } : {}),
+            },
+          },
+          statusHistories: {
+            create: {
+              status: orderStatus,
+              changedBy: actorId,
+              source: 'ADMIN',
+              isPublic: true,
+              note: 'Order created by admin',
+            },
+          },
+        },
+        include: orderDetails,
+      });
+    });
+  }
+
+  listAll(query: ListOrders) {
+    const where: Prisma.OrderWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.paymentStatus ? { paymentStatus: query.paymentStatus } : {}),
+      ...(query.search ? {
+        OR: [
+          { orderCode: { contains: query.search, mode: 'insensitive' } },
+          { shippingName: { contains: query.search, mode: 'insensitive' } },
+          { shippingPhone: { contains: query.search } },
+          { emergencyContactPhone: { contains: query.search } },
+          { guestEmail: { contains: query.search, mode: 'insensitive' } },
+          { contactEmail: { contains: query.search, mode: 'insensitive' } },
+        ],
+      } : {}),
+    };
+    return this.db.$transaction(async (tx) => {
+      const [orders, total, allCount, pendingCount, processingCount, paymentPendingCount, paidRevenue] = await Promise.all([
         tx.order.findMany({
           where,
-          include: { items: true, payment: true },
+          include: { items: true, payment: true, user: { select: { id: true, name: true, email: true, phone: true } } },
           orderBy: { createdAt: 'desc' },
           skip: paginationOffset(query.page, query.pageSize),
           take: query.pageSize,
         }),
         tx.order.count({ where }),
+        tx.order.count(),
+        tx.order.count({ where: { status: OrderStatus.PENDING } }),
+        tx.order.count({ where: { status: OrderStatus.PROCESSING } }),
+        tx.order.count({ where: { paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PENDING] } } }),
+        tx.order.aggregate({ where: { paymentStatus: PaymentStatus.PAID }, _sum: { totalAmount: true } }),
       ]);
-      return paginationResult(orders, total, query.page, query.pageSize, {
+      return {
+        ...paginationResult(orders, total, query.page, query.pageSize, {
         pageSizeKey: 'pageSize',
-      });
+        }),
+        summary: {
+          total: allCount,
+          pending: pendingCount,
+          processing: processingCount,
+          paymentPending: paymentPendingCount,
+          paidRevenue: paidRevenue._sum.totalAmount ?? new Prisma.Decimal(0),
+        },
+      };
     });
   }
 
@@ -342,13 +588,69 @@ export class OrdersRepository {
     return this.db.order.findUnique({ where: { id }, include: orderDetails });
   }
 
-  updateStatus(id: string, actorId: string, input: UpdateOrderStatus) {
+  async findGatewayOrder(id: string, userId?: string) {
+    return this.requireGatewayOrder(this.db, id, userId);
+  }
+
+  private async requireGatewayOrder(tx: Prisma.TransactionClient, id: string, userId?: string) {
+    const order = await tx.order.findFirst({ where: { id, userId }, include: gatewayOrder });
+    if (order?.orderSource !== 'ONLINE' || order.payment?.method !== 'SSL_COMMERZ' ||
+        !order.orderPhoneVerifiedAt || !order.payment.transactions[0]) {
+      throw new NotFoundException('Online payment not found');
+    }
+    return { order, payment: order.payment, transaction: order.payment.transactions[0] };
+  }
+
+  async startGatewaySession(id: string, userId: string, start: (order: GatewayOrder) => Promise<GatewaySession>) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "orders" WHERE id = ${id}::uuid AND user_id = ${userId}::uuid FOR UPDATE`;
+      const { order, transaction } = await this.requireGatewayOrder(tx, id, userId);
+      const outcome = gatewayOrderResult(order);
+      if (outcome !== 'pending') return { outcome };
+      const existing = readGatewaySession(transaction.metadata);
+      if (existing) return { outcome, gatewayUrl: existing.gatewayUrl };
+      const session = await start(order);
+      await tx.transaction.update({ where: { id: transaction.id }, data: { metadata: session } });
+      return { outcome, gatewayUrl: session.gatewayUrl };
+    }, { timeout: 12_000 });
+  }
+
+  async settleGatewayOrder(id: string, outcome: Exclude<GatewayResult, 'pending'>, bankReference?: string, onlyUnstarted = false) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "orders" WHERE id = ${id}::uuid FOR UPDATE`;
+      const { order, payment, transaction } = await this.requireGatewayOrder(tx, id);
+      const existing = gatewayOrderResult(order);
+      if (existing !== 'pending') return existing;
+      if (onlyUnstarted && readGatewaySession(transaction.metadata)) return 'pending';
+      const success = outcome === 'success';
+      const paymentStatus = success ? PaymentStatus.PAID : PaymentStatus.FAILED;
+      const reason = outcome === 'cancelled' ? 'SSLCommerz payment cancelled' : 'SSLCommerz payment failed';
+      await tx.transaction.update({ where: { id: transaction.id }, data: {
+        status: success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED,
+        gatewayTransactionId: bankReference,
+      } });
+      await tx.payment.update({ where: { id: payment.id }, data: { status: paymentStatus } });
+      await tx.order.update({ where: { id }, data: {
+        paymentStatus, version: { increment: 1 },
+        ...(!success && { status: OrderStatus.CANCELLED, cancelReason: reason }),
+      } });
+      if (!success) {
+        await this.releaseReservedStock(tx, await tx.orderItem.findMany({ where: { orderId: id } }));
+        await tx.orderStatusHistory.create({ data: { orderId: id, status: OrderStatus.CANCELLED, note: reason, source: 'SYSTEM' } });
+      }
+      return outcome;
+    });
+  }
+
+  updateStatus(id: string, actorId: string, input: UpdateOrderStatus, expectedVersion: number) {
     return this.db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id },
-        include: { items: true },
+        include: { items: true, user: { select: { email: true } } },
       });
       if (!order) throw new NotFoundException('Order not found');
+      if (order.version !== expectedVersion)
+        throw new ConflictException('Order changed; reload and try again');
       const update = await tx.order.updateMany({
         where: { id, status: order.status, version: order.version },
         data: { status: input.status, version: { increment: 1 } },
@@ -357,6 +659,7 @@ export class OrdersRepository {
         throw new ConflictException('Order changed; reload and try again');
       if (input.status === OrderStatus.CANCELLED)
         await this.releaseReservedStock(tx, order.items);
+      const recipient = order.contactEmail ?? order.guestEmail ?? order.user?.email;
       await tx.orderStatusHistory.create({
         data: {
           orderId: id,
@@ -365,6 +668,7 @@ export class OrdersRepository {
           source: 'ADMIN',
           note: input.note,
           isPublic: input.isPublic,
+          ...(input.isPublic && recipient && { email: { create: { recipient } } }),
         },
       });
       return tx.order.findUnique({ where: { id }, include: orderDetails });
@@ -569,6 +873,57 @@ export class OrdersRepository {
         },
         include: { district: { include: { division: true } } },
       });
+    });
+  }
+
+  updateDeliveryArea(thanaId: string, input: UpdateDeliveryAreaInput) {
+    return this.db.thana.update({
+      where: { id: thanaId },
+      data: {
+        name: input.thana,
+        deliveryZone: input.deliveryZone,
+        shippingFee:
+          input.shippingFee == null
+            ? null
+            : new Prisma.Decimal(input.shippingFee),
+        isDeliverable: input.isDeliverable,
+        freeDeliveryAbove:
+          input.freeDeliveryAbove == null
+            ? null
+            : new Prisma.Decimal(input.freeDeliveryAbove),
+      },
+      include: { district: { include: { division: true } } },
+    });
+  }
+
+  deleteDeliveryArea(thanaId: string) {
+    return this.db.$transaction(async (tx) => {
+      const thana = await tx.thana.findUnique({ where: { id: thanaId } });
+      if (!thana) throw new NotFoundException('Delivery area not found');
+
+      const [addressCount, orderCount] = await Promise.all([
+        tx.address.count({ where: { thanaId } }),
+        tx.order.count({ where: { shippingThanaId: thanaId } }),
+      ]);
+      if (addressCount > 0 || orderCount > 0) {
+        throw new ConflictException(
+          'This delivery area is used by saved addresses or orders. Mark it as not deliverable instead of deleting it.',
+        );
+      }
+
+      await tx.thana.delete({ where: { id: thanaId } });
+      const districtId = thana.districtId;
+      const remainingThanas = await tx.thana.count({ where: { districtId } });
+      if (remainingThanas === 0) {
+        const district = await tx.district.delete({ where: { id: districtId } });
+        const remainingDistricts = await tx.district.count({
+          where: { divisionId: district.divisionId },
+        });
+        if (remainingDistricts === 0) {
+          await tx.division.delete({ where: { id: district.divisionId } });
+        }
+      }
+      return { id: thanaId, deleted: true };
     });
   }
 

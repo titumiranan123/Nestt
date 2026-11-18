@@ -17,6 +17,9 @@ const envSchema = z.object({
       'must not be a repeated character',
     ),
   APP_BASE_URL: z.url(),
+  SSL_COMMERZ_SANDBOX: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
+  SSL_COMMERZ_CALLBACK_BASE_URL: z.url().optional(),
+  R2_PUBLIC_URL: z.url().optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   SMTP_HOST: z.string().min(1),
@@ -24,19 +27,26 @@ const envSchema = z.object({
   SMTP_USER: z.string().min(1),
   SMTP_PASSWORD: z.string().min(1),
   MAIL_FROM: z.string().min(1),
-  TWILIO_ACCOUNT_SID: z.string().startsWith('AC'),
-  TWILIO_AUTH_TOKEN: z.string().min(1),
-  TWILIO_FROM: z.string().regex(/^\+[1-9]\d{7,14}$/),
+  SMS_API_URL: z.url().optional(),
+  SMS_USERID: z.string().min(1).optional(),
+  SMS_PASSWORD: z.string().min(1).optional(),
+  SMS_MASKING: z.string().min(1).optional(),
+  SMS_ACCOUNT_ID: z.string().min(1).optional(),
   SWAGGER_ENABLED: z
     .enum(['true', 'false'])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === 'true')),
+}).superRefine((values, context) => {
+  const smsSettings = [values.SMS_API_URL, values.SMS_USERID, values.SMS_PASSWORD, values.SMS_MASKING, values.SMS_ACCOUNT_ID];
+  if (smsSettings.some(Boolean) && smsSettings.some((setting) => !setting)) {
+    context.addIssue({ code: 'custom', path: ['SMS_API_URL'], message: 'Set the SMS gateway URL, user ID, password, masking and account ID together' });
+  }
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
 
 export function validateEnvironment(env: NodeJS.ProcessEnv): AppConfig {
-  const result = envSchema.safeParse(env);
+  const result = envSchema.safeParse({ ...env, SMTP_PASSWORD: env.SMTP_PASS || env.SMTP_PASSWORD });
   if (!result.success) {
     throw new Error(
       `Invalid environment configuration: ${z.prettifyError(result.error)}`,
@@ -74,6 +84,8 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): AppConfig {
     }
     if (!APP_BASE_URL.startsWith('https://'))
       throw new Error('APP_BASE_URL must use HTTPS in production');
+    if (values.SSL_COMMERZ_CALLBACK_BASE_URL && !values.SSL_COMMERZ_CALLBACK_BASE_URL.startsWith('https://'))
+      throw new Error('SSL_COMMERZ_CALLBACK_BASE_URL must use HTTPS in production');
   }
   return {
     ...values,

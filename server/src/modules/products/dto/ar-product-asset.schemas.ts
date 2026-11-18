@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const upsertARProductAssetSchema = z.strictObject({
   modelUrl: z.url().max(1000),
+  usdzUrl: z.url({ protocol: /^https?$/ }).max(1000).nullish(),
   dimensionsMm: z.tuple([
     z.number().positive().max(10000),
     z.number().positive().max(10000),

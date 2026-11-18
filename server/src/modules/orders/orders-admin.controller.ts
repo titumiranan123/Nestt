@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -21,8 +22,10 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import {
   createOrderRemarkSchema,
+  createAdminOrderSchema,
   listOrdersSchema,
   deliveryAreaSchema,
+  updateDeliveryAreaSchema,
   deliveryZoneConfigSchema,
   updateOrderStatusSchema,
   updatePaymentStatusSchema,
@@ -30,8 +33,10 @@ import {
 } from './dto/order.schemas.js';
 import type {
   CreateOrderRemark,
+  CreateAdminOrder,
   ListOrders,
   DeliveryAreaInput,
+  UpdateDeliveryAreaInput,
   DeliveryZoneConfigInput,
   UpdateOrderStatus,
   UpdatePaymentStatus,
@@ -51,6 +56,15 @@ export class OrdersAdminController {
     return this.orders.listAll(query);
   }
 
+  @Post()
+  @RequirePermissions('orders:create')
+  create(
+    @Req() req: AuthRequest,
+    @Body(new ZodValidationPipe(createAdminOrderSchema)) body: CreateAdminOrder,
+  ) {
+    return this.orders.createAdmin(req.authUserId, body);
+  }
+
   @Get('delivery-areas')
   @RequirePermissions('orders:read')
   listDeliveryAreas() {
@@ -63,6 +77,22 @@ export class OrdersAdminController {
     @Body(new ZodValidationPipe(deliveryAreaSchema)) body: DeliveryAreaInput,
   ) {
     return this.orders.saveDeliveryArea(body);
+  }
+
+  @Patch('delivery-areas/:thanaId')
+  @RequirePermissions('orders:update')
+  updateDeliveryArea(
+    @Param('thanaId', ParseUUIDPipe) thanaId: string,
+    @Body(new ZodValidationPipe(updateDeliveryAreaSchema))
+    body: UpdateDeliveryAreaInput,
+  ) {
+    return this.orders.updateDeliveryArea(thanaId, body);
+  }
+
+  @Delete('delivery-areas/:thanaId')
+  @RequirePermissions('orders:update')
+  deleteDeliveryArea(@Param('thanaId', ParseUUIDPipe) thanaId: string) {
+    return this.orders.deleteDeliveryArea(thanaId);
   }
 
   @Get('delivery-zones')

@@ -41,7 +41,17 @@ export class CategoriesRepository {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
         parent: { select: { id: true, name: true, slug: true } },
-        _count: { select: { children: true } },
+        _count: { select: { children: true, products: true } },
+      },
+    });
+  }
+
+  findAdminById(id: string) {
+    return this.db.category.findUnique({
+      where: { id },
+      include: {
+        parent: { select: { id: true, name: true, slug: true } },
+        _count: { select: { children: true, products: true } },
       },
     });
   }

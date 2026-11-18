@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Navbar } from "@/components/navigation/Navbar";
 import { ArIcon } from "@/components/shared/ArIcon";
 import { arAssets } from "@/lib/ar-assets";
 
@@ -8,7 +7,6 @@ const cardColors = ["bg-[#e6ded1]", "bg-[#d7ded6]", "bg-[#dedbd4]", "bg-[#e6ded8
 export function ArGalleryPage({ fromProduct = false }: { fromProduct?: boolean }) {
   return (
     <div className="min-h-screen bg-[#faf9f6] text-[#24231f]">
-      <Navbar variant="product" />
       <main className="mx-auto max-w-[1280px] px-5 pb-20 pt-10 sm:px-8 lg:px-12">
         <nav aria-label="Breadcrumb" className="mb-8 flex items-center gap-2 text-xs text-[#77736c]">
           <Link href="/" className="hover:text-[#f15a22]">Home</Link>

@@ -42,6 +42,12 @@ export class AttributesAdminController {
     return this.attributes.listAll();
   }
 
+  @Get(':id')
+  @RequirePermissions('products:read')
+  get(@Param('id', ParseUUIDPipe) id: string) {
+    return this.attributes.getAdminById(id);
+  }
+
   @Post()
   @RequirePermissions('products:create')
   create(

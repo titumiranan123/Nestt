@@ -70,12 +70,14 @@ function order(overrides: Record<string, unknown> = {}) {
 
 function serviceWithOrder(result: unknown) {
   const db = { order: { findFirst: vi.fn().mockResolvedValue(result) } };
+  const renderer = new InvoicePdfRenderer();
   return {
     service: new InvoicesService(
       db as unknown as PrismaService,
-      new InvoicePdfRenderer(),
+      renderer,
     ),
     db,
+    renderer,
   };
 }
 
@@ -91,6 +93,25 @@ describe('InvoicesService', () => {
       expect.objectContaining({ where: { id: orderId, userId } }),
     );
     expect(invoice.filename).toMatch(/^NST-INV-20261028-[A-F0-9]{8}\.pdf$/);
+    expect(invoice.buffer.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('renders a failed order invoice using the checkout contact and failed payment status', async () => {
+    const { service, renderer } = serviceWithOrder(order({
+      contactEmail: 'checkout@example.com',
+      paymentStatus: PaymentStatus.FAILED,
+      payment: {
+        method: 'SSL_COMMERZ', status: PaymentStatus.FAILED, currency: 'BDT', id: 'payment-2', transactions: [],
+      },
+    }));
+    const render = vi.spyOn(renderer, 'render');
+    const invoice = await service.createAuthenticatedInvoicePdf(orderId, userId);
+
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({
+      customerEmail: 'checkout@example.com',
+      paymentMethod: 'SSL COMMERZ',
+      paymentStatus: PaymentStatus.FAILED,
+    }));
     expect(invoice.buffer.subarray(0, 5).toString()).toBe('%PDF-');
   });
 

@@ -12,6 +12,7 @@ export const createCategorySchema = z.object({
   sortOrder: z.number().finite().optional(),
   logo: nullableText(255),
   isPublished: z.boolean().optional(),
+  isPopularCat: z.boolean().optional(),
   metaTitle: nullableText(160),
   metaDescription: nullableText(320),
   metaKeywords: z.array(z.string().trim().min(1)).default([]),

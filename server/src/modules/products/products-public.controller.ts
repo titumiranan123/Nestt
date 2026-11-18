@@ -10,6 +10,16 @@ export class ProductsPublicController {
     return this.products.listPublic();
   }
 
+  @Get('collections/recommended')
+  recommended() {
+    return this.products.listRecommended();
+  }
+
+  @Get('collections/new-arrivals')
+  newArrivals() {
+    return this.products.listNewArrivals();
+  }
+
   @Get(':slug')
   get(@Param('slug') slug: string) {
     return this.products.getPublicBySlug(slug);

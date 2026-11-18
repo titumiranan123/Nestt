@@ -2,12 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { accountApi, AccountApiError } from "@/lib/account/api";
+import { downloadOrderInvoice } from "@/lib/account/download-invoice";
 import { useAccount } from "./AccountProvider";
 import { Badge, EmptyState, Icon, Modal, PageHeading } from "./ui";
 import { DeliveryTimeline } from "./DeliveryTimeline";
 import { dateLabel, money, orderTotal, statusLabel } from "@/lib/account/data";
-import type { Address } from "@/lib/account/types";
+import type { Address, CustomerOrder } from "@/lib/account/types";
 
 export function AddressDisplay({ address }: { address: Address }) {
   return (
@@ -26,61 +28,75 @@ export function AddressDisplay({ address }: { address: Address }) {
 }
 
 export function OrderDetailsPage({ id }: { id: string }) {
-  const { state, cancelOrder, returnItem } = useAccount();
-  const order = state.orders.find((o) => o.id === id);
+  const [result, setResult] = useState<{ order?: CustomerOrder; error?: string; notFound?: boolean }>({});
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void accountApi.order(id).then((order) => {
+      if (active) setResult({ order });
+    }).catch((error: unknown) => {
+      if (!active) return;
+      if (error instanceof AccountApiError && error.status === 404) setResult({ notFound: true });
+      else setResult({ error: "Couldn’t load your order details." });
+    });
+    return () => { active = false; };
+  }, [id, attempt]);
+
+  const refresh = () => setAttempt((value) => value + 1);
+  if (result.error) {
+    return <EmptyState title={result.error} description="Check your connection and try again." action={
+      <button className="account-button primary" onClick={() => { setResult({}); refresh(); }}>Try again</button>
+    } />;
+  }
+  if (result.notFound) {
+    return <EmptyState title="We couldn’t find that order." description="Check the order number or return to your orders." action={
+      <Link href="/account/orders" className="account-button primary">Back to orders</Link>
+    } />;
+  }
+  if (!result.order) return <p className="account-note" role="status">Loading your order…</p>;
+  return <OrderDetails order={result.order} refresh={refresh} />;
+}
+
+function OrderDetails({ order, refresh }: { order: CustomerOrder; refresh: () => void }) {
+  const { cancelOrder, returnItem, busy, notify } = useAccount();
   const [dialog, setDialog] = useState<"cancel" | "return" | "tracking" | null>(
     null,
   );
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [itemId, setItemId] = useState("");
-  if (!order)
-    return (
-      <EmptyState
-        title="We couldn’t find that order."
-        description="Check the order number or return to your orders."
-        action={
-          <Link href="/account/orders" className="account-button primary">
-            Back to orders
-          </Link>
-        }
-      />
-    );
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
   const cancelled = order.status === "CANCELLED";
   const delivered = order.status === "DELIVERED";
   const canCancel =
-    ["PENDING", "CONFIRMED", "PROCESSING"].includes(order.status) &&
+    ["PENDING", "CONFIRMED"].includes(order.status) &&
     order.payment !== "PAID";
   const returnable = order.items.filter(
-    (i) => !order.returns.some((r) => r.itemId === i.id),
+    (i) => !order.returns.some((r) => r.itemId === i.id && r.status !== "REJECTED"),
   );
-  const updates = [
-    { title: "Order placed", date: dateLabel(order.date), done: true },
-    {
-      title: "Your order is confirmed",
-      date: "Preparing your order",
-      done: order.status !== "PENDING" && !cancelled,
-    },
-    {
-      title: "Dispatched from Dhaka warehouse",
-      date: "Nestt delivery team",
-      done: order.status === "SHIPPED" || delivered,
-    },
-    {
-      title: "Delivered to your home",
-      date: order.deliveredAt ? dateLabel(order.deliveredAt) : "",
-      done: delivered,
-    },
-  ]
-    .filter((u) => u.done)
-    .reverse();
-  function submit(e: FormEvent) {
+  const updates = [...order.updates].reverse();
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!reason.trim()) return;
-    if (dialog === "cancel") cancelOrder(id, reason);
-    else if (dialog === "return" && itemId)
-      returnItem(id, itemId, reason, note);
-    setDialog(null);
+    if (!reason.trim() || busy) return;
+    const details = note.trim() ? `${reason} — ${note.trim()}` : reason;
+    const saved = dialog === "cancel"
+      ? await cancelOrder(order.id, reason)
+      : !!itemId && await returnItem(order.id, itemId, details);
+    if (saved) {
+      refresh();
+      setDialog(null);
+    }
+  }
+
+  async function downloadInvoice() {
+    setInvoiceBusy(true);
+    try {
+      await downloadOrderInvoice(order.id, order.code);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Couldn’t download the invoice.", true);
+    } finally {
+      setInvoiceBusy(false);
+    }
   }
   function openReturn() {
     setItemId(returnable[0]?.id ?? "");
@@ -94,12 +110,12 @@ export function OrderDetailsPage({ id }: { id: string }) {
         ← Back to orders
       </Link>
       <PageHeading
-        title={`Order #${order.id}`}
+        title={`Order #${order.code}`}
         description={`Placed on ${dateLabel(order.date)}`}
         action={
-          <button className="account-button" onClick={() => window.print()}>
+          <button className="account-button" disabled={invoiceBusy} onClick={() => void downloadInvoice()}>
             <Icon name="download" size={16} />
-            Print invoice
+            {invoiceBusy ? "Downloading…" : "Download invoice"}
           </button>
         }
       />
@@ -110,7 +126,6 @@ export function OrderDetailsPage({ id }: { id: string }) {
         <Badge tone={order.payment.toLowerCase()}>
           {statusLabel(order.payment)}
         </Badge>
-        <span>Demo order</span>
       </div>
       <section className="tracking-panel">
         <h2 className="account-section-title">
@@ -126,18 +141,15 @@ export function OrderDetailsPage({ id }: { id: string }) {
           {cancelled
             ? (order.cancelReason ?? "This order will not be delivered.")
             : delivered
-              ? `Delivered on ${dateLabel(order.deliveredAt ?? order.date)}`
-              : `Estimated arrival: ${order.delivery ?? "We’ll confirm your delivery shortly."}`}
+              ? order.deliveredAt ? `Delivered on ${dateLabel(order.deliveredAt)}` : "Delivered"
+              : "Check your delivery updates for the latest progress."}
         </p>
         {!cancelled && <DeliveryTimeline status={order.status} />}
         {!cancelled && (
           <div className="tracking-provider">
             <span>
               <Icon name="truck" />
-              Nestt delivery team{" "}
-              {order.status === "SHIPPED" || delivered
-                ? `· NST-DHK-${order.id.slice(4)}`
-                : "· Awaiting dispatch"}
+              {statusLabel(order.status)}
             </span>
             <button
               className="account-button"
@@ -155,10 +167,11 @@ export function OrderDetailsPage({ id }: { id: string }) {
             {order.items.map((item) => (
               <div className="order-detail-item" key={item.id}>
                 <Image
-                  src={item.image}
+                  src={item.image ?? "/assets/hero/quality-living-room.webp"}
                   alt={item.name}
                   width={220}
                   height={165}
+                  unoptimized
                 />
                 <div>
                   <h3>{item.name}</h3>
@@ -177,13 +190,19 @@ export function OrderDetailsPage({ id }: { id: string }) {
                 Shipping address
               </h2>
               <AddressDisplay address={order.shipping} />
+              {order.contactEmail && <p className="account-note">Order updates go to {order.contactEmail}.</p>}
+              {order.orderPhoneVerifiedAt && <p className="account-note">Order phone verified at checkout</p>}
+              {!order.cashOnDelivery && order.payment === "PENDING" && order.orderPhoneVerifiedAt &&
+                <Link className="text-link" href={`/checkout/pending/${order.id}`}>Check payment status</Link>}
             </section>
             <section className="account-card">
               <h2>
                 <Icon name="box" size={18} />
                 Billing address
               </h2>
-              <p className="account-note">Same as shipping address</p>
+              {order.billing ? <AddressDisplay address={order.billing} /> : (
+                <p className="account-note">Same as shipping address</p>
+              )}
             </section>
           </div>
         </div>
@@ -193,9 +212,7 @@ export function OrderDetailsPage({ id }: { id: string }) {
             <div>
               <dt>Subtotal</dt>
               <dd>
-                {money(
-                  order.items.reduce((n, i) => n + i.price * i.quantity, 0),
-                )}
+                {money(order.subtotal)}
               </dd>
             </div>
             <div>
@@ -223,14 +240,13 @@ export function OrderDetailsPage({ id }: { id: string }) {
                 {statusLabel(order.payment)}
               </Badge>
             </div>
-            {order.transaction && <p>Transaction: {order.transaction}</p>}
-            {order.payment === "PENDING" && !cancelled && (
+            {order.cashOnDelivery && order.payment === "UNPAID" && !cancelled && (
               <p>
                 Please pay {money(orderTotal(order))} when your order arrives.
               </p>
             )}
             {order.payment === "REFUNDED" && (
-              <p>This sample order is marked as refunded.</p>
+              <p>This order has been refunded.</p>
             )}
           </div>
         </section>
@@ -238,18 +254,18 @@ export function OrderDetailsPage({ id }: { id: string }) {
       <div className="order-detail-bottom">
         <section className="account-card">
           <h2 className="account-section-title">Delivery updates</h2>
-          {cancelled ? (
+          {updates.length === 0 ? (
             <p className="account-note">
-              Order cancelled. No further deliveries are scheduled.
+              Updates will appear here when your order status changes.
             </p>
           ) : (
             <ol className="delivery-updates">
               {updates.map((u, i) => (
-                <li key={u.title}>
+                <li key={u.id}>
                   <span className={i === 0 ? "current" : ""} />
                   <div>
-                    <strong>{u.title}</strong>
-                    <p>{u.date}</p>
+                    <strong>{statusLabel(u.status)}</strong>
+                    <p>{dateLabel(u.date)}{u.note ? ` · ${u.note}` : ""}</p>
                   </div>
                 </li>
               ))}
@@ -264,7 +280,7 @@ export function OrderDetailsPage({ id }: { id: string }) {
           <p>Get in touch with our team about your furniture or delivery.</p>
           <a
             className="account-button primary"
-            href={`mailto:hello@nestt.home?subject=${encodeURIComponent(`Help with order ${order.id}`)}`}
+            href={`mailto:hello@nestt.com?subject=${encodeURIComponent(`Help with order ${order.code}`)}`}
           >
             Contact Nestt <Icon name="arrow" size={15} />
           </a>
@@ -284,7 +300,7 @@ export function OrderDetailsPage({ id }: { id: string }) {
               <p className="order-policy">
                 {order.payment === "PAID"
                   ? "Paid orders require support assistance for cancellation."
-                  : "Cancellation is unavailable after dispatch."}
+                  : "This order can no longer be cancelled online."}
               </p>
             )
           )}
@@ -300,14 +316,13 @@ export function OrderDetailsPage({ id }: { id: string }) {
           <h2 className="account-section-title">Your return requests</h2>
           {order.returns.map((r) => (
             <div key={r.reference}>
-              <Badge tone="pending">Requested</Badge>
+              <Badge tone={r.status === "REJECTED" ? "cancelled" : r.status === "REQUESTED" ? "pending" : "good"}>{statusLabel(r.status)}</Badge>
               <strong>{r.reference}</strong>
               <p>
                 {order.items.find((i) => i.id === r.itemId)?.name} · {r.reason}
               </p>
               <p className="account-note">
-                Recorded on {dateLabel(r.date)} in this browser. No return
-                request has been sent to Nestt.
+                Requested on {dateLabel(r.date)}
               </p>
             </div>
           ))}
@@ -316,27 +331,21 @@ export function OrderDetailsPage({ id }: { id: string }) {
       {dialog === "tracking" && (
         <Modal title="Your delivery journey" onClose={() => setDialog(null)}>
           <p className="dialog-description">
-            Order #{order.id} ·{" "}
-            {order.delivery
-              ? `Estimated ${order.delivery}`
-              : statusLabel(order.status)}
+            Order #{order.code} · {statusLabel(order.status)}
           </p>
           <DeliveryTimeline status={order.status} />
           <ol className="delivery-updates">
             {updates.map((u) => (
-              <li key={u.title}>
+              <li key={u.id}>
                 <span />
                 <div>
-                  <strong>{u.title}</strong>
-                  <p>{u.date}</p>
+                  <strong>{statusLabel(u.status)}</strong>
+                  <p>{dateLabel(u.date)}{u.note ? ` · ${u.note}` : ""}</p>
                 </div>
               </li>
             ))}
           </ol>
-          <p className="account-note">
-            Sample order history. Delivery status updates are added manually
-            by our team.
-          </p>
+          {!updates.length && <p className="account-note">No delivery updates yet.</p>}
           <button
             className="account-button full-width"
             onClick={() => setDialog(null)}
@@ -354,8 +363,8 @@ export function OrderDetailsPage({ id }: { id: string }) {
         >
           <p className="dialog-description">
             {dialog === "cancel"
-              ? "This demo cancellation cannot be undone. Your other orders will stay as they are."
-              : "Choose the item and tell us what happened. This records a demo request on this device."}
+              ? "Confirm to cancel this order and stop its delivery."
+              : "Choose an item and tell us what happened. Nestt will review your return request."}
           </p>
           <form className="account-form" onSubmit={submit}>
             {dialog === "return" && (
@@ -406,7 +415,7 @@ export function OrderDetailsPage({ id }: { id: string }) {
               <label className="account-field">
                 Additional details (optional)
                 <textarea
-                  maxLength={500}
+                  maxLength={440}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Tell us a little more…"
@@ -421,53 +430,15 @@ export function OrderDetailsPage({ id }: { id: string }) {
               >
                 {dialog === "cancel" ? "Keep order" : "Go back"}
               </button>
-              <button className="account-button primary" type="submit">
+              <button className="account-button primary" type="submit" disabled={busy}>
                 {dialog === "cancel"
                   ? "Confirm cancellation"
-                  : "Record demo return"}
+                  : "Send return request"}
               </button>
             </div>
           </form>
         </Modal>
       )}
-      <section className="print-invoice">
-        <h1>NESTT · Demo invoice</h1>
-        <p>
-          Order #{order.id} · {dateLabel(order.date)}
-        </p>
-        <AddressDisplay address={order.shipping} />
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Quantity</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {order.items.map((i) => (
-              <tr key={i.id}>
-                <td>
-                  {i.name} — {i.variant}
-                </td>
-                <td>{i.quantity}</td>
-                <td>{money(i.quantity * i.price)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p>
-          Delivery: {money(order.shippingCharge)} · Discount:{" "}
-          {money(order.discount)}
-        </p>
-        <strong>Total: {money(orderTotal(order))}</strong>
-        <p>
-          Payment: {order.method} · {statusLabel(order.payment)}
-        </p>
-        <p>
-          Sample document only. This is not proof of purchase or a tax invoice.
-        </p>
-      </section>
     </>
   );
 }

@@ -1,4 +1,11 @@
 import { Check } from "lucide-react";
-export default function PaymentGatewayToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) {
- return <div className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-gray-50/70 p-4"><div><h3 className="text-xs font-bold text-gray-900">{label}</h3><p className="mt-1 text-[11px] leading-5 text-gray-500">{description}</p></div><button type="button" role="switch" aria-checked={checked} onClick={()=>onChange(!checked)} className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked?"bg-brand":"bg-gray-300"}`}><span className={`absolute top-1 grid size-4 place-items-center rounded-full bg-white shadow transition-all ${checked?"left-6":"left-1"}`}>{checked&&<Check size={10} className="text-brand"/>}</span></button></div>;
+
+export default function PaymentGatewayToggle({ label, description, checked, onChange, disabled = false }: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return <div className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-gray-50/70 p-4"><div><h3 className="text-xs font-bold text-gray-900">{label}</h3><p className="mt-1 text-[11px] leading-5 text-gray-500">{description}</p></div><button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={()=>onChange(!checked)} className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${checked?"bg-brand":"bg-gray-300"}`}><span className={`absolute top-1 grid size-4 place-items-center rounded-full bg-white shadow transition-all ${checked?"left-6":"left-1"}`}>{checked&&<Check size={10} className="text-brand"/>}</span></button></div>;
 }

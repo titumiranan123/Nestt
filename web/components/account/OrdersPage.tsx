@@ -10,12 +10,11 @@ import {
   dateLabel,
   money,
   orderTotal,
-  products,
   statusLabel,
 } from "@/lib/account/data";
 
 export function OrdersPage() {
-  const { state, addToBag } = useAccount();
+  const { state, buyAgain, busy } = useAccount();
   const params = useSearchParams();
   const [tab, setTab] = useState(
     params.get("status") === "progress" ? "progress" : "all",
@@ -31,11 +30,11 @@ export function OrdersPage() {
   const filtered = state.orders.filter(
     (o) =>
       matchesTab(o.status, tab) &&
-      `${o.id} ${o.items.map((i) => i.name).join(" ")}`
+      `${o.code} ${o.items.map((i) => i.name).join(" ")}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()) &&
       (range === "all" ||
-        new Date(`${o.date}T12:00:00`).getTime() >=
+        Date.parse(o.date) >=
           Date.now() - Number(range) * 86400000),
   );
   const pages = Math.ceil(filtered.length / 4);
@@ -136,7 +135,7 @@ export function OrdersPage() {
             {shown.map((order) => (
               <article className="order-card" key={order.id}>
                 <div className="order-card-header">
-                  <strong>Order #{order.id}</strong>
+                  <strong>Order #{order.code}</strong>
                   <span>Placed on {dateLabel(order.date)}</span>
                   <Badge tone={order.status.toLowerCase()}>
                     {statusLabel(order.status)}
@@ -147,26 +146,19 @@ export function OrdersPage() {
                 </div>
                 <div className="order-card-body">
                   <Image
-                    src={order.items[0].image}
-                    alt={order.items[0].name}
+                    src={order.items[0]?.image ?? "/assets/hero/quality-living-room.webp"}
+                    alt={order.items[0]?.name ?? ""}
                     width={200}
                     height={130}
+                    unoptimized
                   />
                   <div className="order-card-product">
-                    <h2>{order.items[0].name}</h2>
-                    <p>
-                      {order.items[0].variant} / Qty {order.items[0].quantity}
+                    <h2>{order.items[0]?.name ?? "Order items"}</h2>
+                    {order.items[0] && <p>
+                      {order.items[0].variant && `${order.items[0].variant} / `}Qty {order.items[0].quantity}
                       {order.items.length > 1 &&
                         ` +${order.items.length - 1} more items`}
-                    </p>
-                    {order.delivery && order.status !== "CANCELLED" && (
-                      <div className="order-arrival">
-                        <Icon name="calendar" size={17} />
-                        <div>
-                          Estimated delivery<strong>{order.delivery}</strong>
-                        </div>
-                      </div>
-                    )}
+                    </p>}
                     {order.deliveredAt && (
                       <div className="order-arrival">
                         <Icon name="check" size={17} />
@@ -201,16 +193,11 @@ export function OrdersPage() {
                     >
                       View details
                     </Link>
-                    {order.status === "DELIVERED" && (
+                    {order.status === "DELIVERED" && order.items.length > 0 && (
                       <button
                         className="account-button primary"
-                        onClick={() => {
-                          const item = order.items[0];
-                          const p = products.find(
-                            (p) => p.id === item.productId,
-                          );
-                          if (p) addToBag(p.id, p.options[0], item.quantity);
-                        }}
+                        disabled={busy}
+                        onClick={() => void buyAgain(order)}
                       >
                         Buy again
                       </button>

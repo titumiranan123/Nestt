@@ -35,6 +35,12 @@ export class CategoriesAdminController {
     return this.categories.listAll();
   }
 
+  @Get(':id')
+  @RequirePermissions('products:read')
+  get(@Param('id', ParseUUIDPipe) id: string) {
+    return this.categories.getById(id);
+  }
+
   @Post()
   @RequirePermissions('products:create')
   create(

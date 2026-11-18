@@ -7,6 +7,7 @@ import { SeoPageHeader } from "@/components/admin/tools/SeoPageHeader";
 import { SeoPageFields } from "@/components/admin/tools/SeoPageFields";
 import { SeoSubmitButton } from "@/components/admin/tools/SeoSubmitButton";
 import { SeoSchemaEditor } from "@/components/admin/tools/SeoSchemaEditor";
+import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
 
 type SeoDraft = {
   pageName: string;
@@ -81,7 +82,7 @@ export function PageSeoEditor() {
     saveMutation.mutate({ pageName, input, exists: metadataQuery.data?.some((record) => record.pageName === pageName) ?? false });
   };
 
-  if (metadataQuery.isPending) return <div className="-mx-3 -my-5 min-h-full bg-white px-3 py-5 text-sm text-gray-500 sm:-mx-5 sm:-my-6 sm:px-5 sm:py-6 lg:-mx-8 lg:-my-6 lg:px-8 lg:py-6">Loading SEO metadata…</div>;
+  if (metadataQuery.isPending) return <AdminLoadingSkeleton kind="editor" label="Loading SEO metadata" />;
 
   return <div className="-mx-3 -my-5 min-h-full animate-fade-up bg-white px-3 py-5 sm:-mx-5 sm:-my-6 sm:px-5 sm:py-6 lg:-mx-8 lg:-my-6 lg:px-8 lg:py-6">
     <SeoPageHeader active="/admin/seo/page-seo" title="Page metadata" description="Manage search titles, descriptions, canonical URLs, social previews, and structured data for each storefront page."/>

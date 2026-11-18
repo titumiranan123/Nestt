@@ -1,66 +1,87 @@
 "use client";
 
-import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ProductModelViewer, ProductRoomButton } from "@/components/ar/ArModelViewer";
+import { catalogImageUrl, type ProductDetailVariant } from "@/lib/catalog";
 import { ProductIcon } from "./ProductDetailsIcons";
 
-type GalleryView = "photo" | "360" | "dimensions" | "room";
+const toolClass = "flex min-w-0 cursor-pointer flex-col items-center justify-center gap-1 bg-[#f5f5f5] px-1 text-center text-[10px] leading-3 text-[#303030] enabled:hover:bg-[#ececec] disabled:cursor-default lg:px-3 lg:text-xs lg:leading-[14px]";
 
-const galleryTools: { id: Exclude<GalleryView, "photo">; label: string }[] = [
-  { id: "360", label: "360° View" },
-  { id: "dimensions", label: "Dimensions" },
-  { id: "room", label: "Try in Your Space" },
-];
+export function ProductGallery({
+  variant,
+  productName,
+  onDimensions,
+}: {
+  variant?: ProductDetailVariant;
+  productName: string;
+  onDimensions?: () => void;
+}) {
+  const [selectedPhoto, setSelectedPhoto] = useState<string>();
+  const [modelMode, setModelMode] = useState<"360" | "room-unavailable">();
+  const modelDialog = useRef<HTMLDialogElement>(null);
+  const photos = (variant?.media ?? []).flatMap((media) => {
+    const url = catalogImageUrl(media.url);
+    return url && media.type?.toLowerCase() !== "video" ? [{ ...media, url }] : [];
+  });
+  const primaryPhoto = photos.find((photo) => photo.isPrimary) ?? photos[0];
+  const photo = photos.find((entry) => entry.url === selectedPhoto) ?? primaryPhoto;
+  const modelUrl = catalogImageUrl(variant?.arAsset?.modelUrl);
+  const usdzUrl = catalogImageUrl(variant?.arAsset?.usdzUrl);
+  const hasRoomView = modelUrl && variant?.arAsset?.placement === "floor";
 
-export function ProductGallery({ image, productName }: { image: string; productName: string }) {
-  const [view, setView] = useState<GalleryView>("photo");
-  const [isSaved, setIsSaved] = useState(false);
+  function openModel(mode: "360" | "room-unavailable") {
+    modelDialog.current?.showModal();
+    setModelMode(mode);
+  }
 
   return (
-    <div className="min-w-0">
-      <div className="group relative aspect-[1.25] overflow-hidden bg-[#f4f1e9]">
-        <Image
-          src={image}
-          alt={`Olive green ${productName} in a bright living room`}
-          fill
-          preload
-          sizes="(max-width: 767px) 100vw, 62vw"
-          className={`object-cover transition-transform duration-700 ${view === "photo" ? "group-hover:scale-[1.015]" : "scale-[1.08]"}`}
-        />
-        <button
-          type="button"
-          onClick={() => setIsSaved(!isSaved)}
-          aria-label={isSaved ? "Remove from wishlist" : "Add to wishlist"}
-          aria-pressed={isSaved}
-          className={`absolute right-3 top-3 flex size-9 cursor-pointer items-center justify-center bg-white/95 ${isSaved ? "text-[#f15a22]" : "text-[#333] hover:text-[#f15a22]"}`}
-        >
-          <ProductIcon kind="heart" />
-        </button>
-
-        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 bg-white/95 p-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setView("photo")}
-            aria-label="View product photo"
-            aria-pressed={view === "photo"}
-            className={`relative h-[42px] w-[54px] overflow-hidden border-2 ${view === "photo" ? "border-[#f15a22]" : "border-transparent"}`}
-          >
-            <Image src={image} alt="" fill sizes="54px" className="object-cover" />
+    <section aria-label="Product gallery" className="min-w-0">
+      <div data-product-photo className="relative aspect-[876/700] overflow-hidden bg-[#f4f1e9]">
+        {photo && <img src={photo.url} alt={photo.alt || productName} fetchPriority="high" className="size-full object-cover" />}
+        <div aria-label="Gallery views" role="group" className="absolute bottom-3 left-1/2 grid w-[280px] max-w-[calc(100%-1rem)] -translate-x-1/2 auto-rows-[48px] grid-cols-4 gap-1 bg-white p-1 md:w-[340px] md:auto-rows-[56px] md:gap-1.5 md:p-1.5 lg:bottom-5 lg:w-[440px] lg:auto-rows-[72px] lg:gap-2 lg:p-2">
+          <button type="button" disabled={!primaryPhoto} onClick={() => setSelectedPhoto(primaryPhoto?.url)} aria-label="View main product photo"
+            aria-pressed={!!primaryPhoto && photo?.url === primaryPhoto.url}
+            className="cursor-pointer overflow-hidden border-2 border-transparent bg-[#f5f5f5] aria-pressed:border-[#f15a22] disabled:cursor-default">
+            {primaryPhoto && <img src={primaryPhoto.url} alt="" className="size-full object-cover" />}
           </button>
-          {galleryTools.map((tool) => (
-            <button
-              key={tool.id}
-              type="button"
-              onClick={() => setView(tool.id)}
-              aria-pressed={view === tool.id}
-              className={`flex h-[42px] min-w-[52px] cursor-pointer flex-col items-center justify-center gap-0.5 px-1 text-[8px] leading-[10px] text-[#555] hover:bg-[#f4f3f1] ${view === tool.id ? "bg-[#f4f3f1]" : ""}`}
-            >
-              {tool.id === "360" ? <span className="text-[16px]">◌</span> : <ProductIcon kind={tool.id} />}
-              <span>{tool.label}</span>
+          <button type="button" disabled={!modelUrl} onClick={() => openModel("360")} className={toolClass}>
+            <ProductIcon kind="orbit" className="size-4 lg:size-5" />360° View
+          </button>
+          <button type="button" disabled={!onDimensions} onClick={onDimensions} className={toolClass}>
+            <ProductIcon kind="dimensions" className="size-4 lg:size-5" />Dimensions
+          </button>
+          {hasRoomView ? (
+            <ProductRoomButton src={modelUrl} iosSrc={usdzUrl} className={toolClass}
+              onUnavailable={() => openModel("room-unavailable")}>
+              <ProductIcon kind="room" className="size-4 lg:size-5" /><span>Try In Your<br />Space</span>
+            </ProductRoomButton>
+          ) : (
+            <button type="button" disabled className={toolClass}>
+              <ProductIcon kind="room" className="size-4 lg:size-5" /><span>Try In Your<br />Space</span>
             </button>
-          ))}
+          )}
         </div>
       </div>
-    </div>
+      {photos.length > 1 && <div className="mt-3 flex flex-wrap gap-2" aria-label="More product photos">
+        {photos.map((entry, index) => (
+          <button key={`${entry.url}-${index}`} type="button" aria-label={`View product photo ${index + 1}`}
+            aria-pressed={photo?.url === entry.url} onClick={() => setSelectedPhoto(entry.url)}
+            className="size-14 cursor-pointer overflow-hidden border border-[#e7e5e0] aria-pressed:border-[#f15a22] sm:size-16">
+            <img src={entry.url} alt="" loading="lazy" className="size-full object-cover" />
+          </button>
+        ))}
+      </div>}
+      {modelUrl && <dialog ref={modelDialog} onClose={() => setModelMode(undefined)} aria-labelledby="product-model-title"
+        className="fixed inset-0 m-auto w-[min(720px,96vw)] max-w-none bg-white text-[#222] shadow-xl backdrop:bg-black/45">
+        <header className="flex items-center justify-between gap-4 border-b border-[#ececec] px-4 py-3">
+          <h2 id="product-model-title" className="text-sm font-semibold">360° View</h2>
+          <form method="dialog"><button aria-label="Close product model" className="size-8 cursor-pointer text-xl">×</button></form>
+        </header>
+        {modelMode === "room-unavailable" && (
+          <p role="status" className="px-4 py-2 text-sm text-[#555]">Couldn’t open room view. You can rotate the model here.</p>
+        )}
+        {modelMode && <ProductModelViewer src={modelUrl} name={productName} allowAR={false} />}
+      </dialog>}
+    </section>
   );
 }

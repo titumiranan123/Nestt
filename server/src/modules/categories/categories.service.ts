@@ -26,6 +26,13 @@ export class CategoriesService {
     return this.repository.listAll();
   }
 
+  async getById(id: string) {
+    const category = await this.repository.findAdminById(id);
+    if (!category || category.deletedAt)
+      throw new NotFoundException('Category not found');
+    return category;
+  }
+
   async create(input: CreateCategory) {
     if (input.parentId) await this.ensureActiveParent(input.parentId);
     try {

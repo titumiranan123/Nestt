@@ -2,13 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { OrdersAdminController } from './orders-admin.controller.js';
 import { OrdersController } from './orders.controller.js';
 import type { OrdersService } from './orders.service.js';
+import type { SslCheckoutService } from './ssl-checkout.service.js';
 
 describe('OrdersController', () => {
   it('delegates checkout, own-order queries, cancel, and return requests', async () => {
     const orders = {
       create: vi.fn(), listMine: vi.fn(), getMine: vi.fn(), cancelMine: vi.fn(), requestReturn: vi.fn(),
     };
-    const controller = new OrdersController(orders as unknown as OrdersService);
+    const controller = new OrdersController(orders as unknown as OrdersService, {} as SslCheckoutService);
     const request = { authUserId: 'user-1' } as never;
     await Promise.all([
       controller.create(request, { items: [], billingSameAsShipping: true } as never),
@@ -17,7 +18,7 @@ describe('OrdersController', () => {
       controller.cancel(request, 'order-1', { reason: 'Changed mind' }),
       controller.requestReturn(request, 'order-1', { itemId: 'item-1' }),
     ]);
-    expect(orders.create).toHaveBeenCalledWith('user-1', { items: [], billingSameAsShipping: true });
+    expect(orders.create).toHaveBeenCalledWith('user-1', { items: [], billingSameAsShipping: true }, 'unknown');
     expect(orders.listMine).toHaveBeenCalledWith('user-1', { page: 1, pageSize: 20 });
     expect(orders.getMine).toHaveBeenCalledWith('user-1', 'order-1');
     expect(orders.cancelMine).toHaveBeenCalledWith('user-1', 'order-1', { reason: 'Changed mind' });

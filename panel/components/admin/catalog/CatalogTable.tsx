@@ -87,19 +87,18 @@ function BrandTable({ rows, onTogglePublished, onEdit, onDelete }: CatalogTableP
 }
 
 function AttributeTable({ rows, onTogglePublished, onEdit, onDelete }: CatalogTableProps) {
-  return <div className="overflow-x-auto"><table className="w-full min-w-[1080px] table-fixed divide-y divide-gray-100 text-left text-sm">
-    <colgroup><col className="w-[7%]" /><col className="w-[16%]" /><col className="w-[26%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[13%]" /><col className="w-[9%]" /><col className="w-[15%]" /></colgroup>
-    <thead className="border-b border-brand/10 bg-brand-soft/45 text-xs font-semibold uppercase tracking-[0.14em] text-gray-600"><tr className="divide-x divide-gray-100">{["Id", "Variant", "Value", "Option", "Card", "Created On", "Publish", "Action"].map((heading) => <th key={heading} className="px-4 py-3.5">{heading}</th>)}</tr></thead>
+  return <div className="overflow-x-auto"><table className="w-full min-w-[950px] table-fixed divide-y divide-gray-100 text-left text-sm">
+    <colgroup><col className="w-[7%]" /><col className="w-[19%]" /><col className="w-[34%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[9%]" /><col className="w-[15%]" /></colgroup>
+    <thead className="border-b border-brand/10 bg-brand-soft/45 text-xs font-semibold uppercase tracking-[0.14em] text-gray-600"><tr className="divide-x divide-gray-100">{["Id", "Attribute", "Option values", "Type", "Filter", "Publish", "Action"].map((heading) => <th key={heading} className="px-4 py-3.5">{heading}</th>)}</tr></thead>
     <tbody className="divide-y divide-gray-100 bg-white">{rows.map((attribute, index) => <tr key={attribute.id} className={`${index % 2 ? "bg-brand-soft/15" : "bg-white"} divide-x divide-gray-100 transition-colors hover:bg-orange-50/50`}>
       <td className="whitespace-nowrap px-4 py-4 font-medium text-gray-700">{index + 1}</td>
       <td className="px-4 py-4"><strong className="block font-semibold text-gray-800">{attribute.name}</strong><small className="mt-1 block text-xs text-gray-400">{attribute.slug}</small></td>
       <td className="px-4 py-4 text-xs leading-5 text-gray-700">{attribute.options?.length ? attribute.options.map((option, optionIndex) => <span key={`${attribute.id}-${option}`} className="mr-1.5">{option}{optionIndex < (attribute.options?.length ?? 0) - 1 ? "," : ""}</span>) : <span className="text-gray-400">—</span>}</td>
-      <td className="px-4 py-4 text-xs text-gray-700"><span className="block font-medium">{attribute.type ?? "Dropdown"}</span><small className="mt-1 block text-gray-400">{attribute.showInFilter ? "Shown in filters" : "Hidden from filters"}</small></td>
-      <td className="px-4 py-4 text-xs text-gray-700">{attribute.showOnProductCard ? <><span className="block font-medium">{attribute.cardDisplayType ?? "Chip"}</span><small className="mt-1 block text-gray-400">Max {attribute.cardMaxOptions ?? 4}</small></> : <span className="text-gray-400">Hidden</span>}</td>
-      <td className="whitespace-nowrap px-4 py-4 text-xs text-gray-600"><span className="block">{dateLabel(attribute.createdAt)}</span><span className="mt-1 block text-gray-400">{timeLabel(attribute.createdAt)}</span></td>
+      <td className="px-4 py-4 text-xs text-gray-700">Dropdown</td>
+      <td className="px-4 py-4 text-xs text-gray-700">{attribute.showInFilter ? <span className="font-medium text-emerald-700">Shown</span> : <span className="text-gray-400">Hidden</span>}</td>
       <td className="whitespace-nowrap px-4 py-4"><PublishSwitch name={attribute.name} checked={attribute.isPublished} onClick={() => onTogglePublished(attribute)} /></td>
       <td className="whitespace-nowrap px-4 py-4"><RowActions row={attribute} onEdit={onEdit} onDelete={onDelete} /></td>
-    </tr>)}{rows.length === 0 && <EmptyRow columns={8} kind="attributes" />}</tbody>
+    </tr>)}{rows.length === 0 && <EmptyRow columns={7} kind="attributes" />}</tbody>
   </table></div>;
 }
 

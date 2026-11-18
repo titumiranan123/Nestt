@@ -7,16 +7,19 @@ export type OrderStatus =
   | "CANCELLED";
 export type Product = {
   id: string;
+  variantId: string;
   name: string;
   category: string;
   price: number;
   image: string;
   finish: string;
   stock: number;
-  options: string[];
+  canAddToCart: boolean;
+  isPriceOnRequest: boolean;
 };
 export type Address = {
   id: string;
+  thanaId: string;
   label: string;
   fullName: string;
   phone: string;
@@ -29,6 +32,7 @@ export type Address = {
   isDefaultBilling: boolean;
 };
 export type Profile = {
+  id: string;
   name: string;
   email: string;
   phone: string;
@@ -37,42 +41,54 @@ export type Profile = {
 };
 export type OrderItem = {
   id: string;
-  productId: string;
+  variantId: string | null;
   name: string;
-  image: string;
+  image?: string;
   variant: string;
   quantity: number;
   price: number;
 };
 export type CustomerOrder = {
   id: string;
+  code: string;
   date: string;
   status: OrderStatus;
-  payment: "PAID" | "PENDING" | "REFUNDED";
+  payment: "UNPAID" | "PENDING" | "PAID" | "FAILED" | "PARTIALLY_REFUNDED" | "REFUNDED";
   method: string;
-  transaction?: string;
-  delivery?: string;
+  cashOnDelivery: boolean;
+  contactEmail?: string | null;
+  orderPhoneVerifiedAt?: string | null;
   deliveredAt?: string;
   items: OrderItem[];
   shipping: Address;
+  billing?: Address;
+  subtotal: number;
+  total: number;
   shippingCharge: number;
   discount: number;
   cancelReason?: string;
   returns: {
     itemId: string;
     reason: string;
-    note: string;
+    status: string;
     reference: string;
     date: string;
   }[];
+  updates: { id: string; status: OrderStatus; note: string | null; date: string }[];
 };
-export type BagItem = { productId: string; option: string; quantity: number };
 export type AccountState = {
-  version: 1;
   profile: Profile;
   orders: CustomerOrder[];
   addresses: Address[];
-  wishlist: string[];
-  bag: BagItem[];
-  signedOut: boolean;
+  wishlist: Product[];
+};
+
+export type DeliveryDivision = {
+  id: string;
+  name: string;
+  districts: {
+    id: string;
+    name: string;
+    thanas: { id: string; name: string; isDeliverable: boolean }[];
+  }[];
 };

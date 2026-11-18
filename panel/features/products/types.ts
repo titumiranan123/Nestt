@@ -2,6 +2,38 @@ export type ProductStatus = "draft" | "active" | "inactive" | "archived";
 export type VariantStatus = "draft" | "active" | "inactive";
 export type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK" | "PREORDER";
 export type UseEnvironment = "indoor" | "outdoor";
+export type SpecificationItemType = "TEXT" | "NUMBER" | "BOOLEAN";
+
+export type ProductSpecificationItemInput = {
+  label: string;
+  value: string;
+  type?: SpecificationItemType;
+  href?: string | null;
+  sortOrder?: number;
+};
+
+export type ProductSpecificationInput = {
+  title?: string;
+  image?: string | null;
+  sortOrder?: number;
+  specs: ProductSpecificationItemInput[];
+};
+
+export type ProductCareItem = {
+  id: string;
+  productId: string;
+  title: string;
+  description: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductCareItemInput = {
+  title: string;
+  description?: string | null;
+  displayOrder?: number;
+};
 
 export type ProductVariant = {
   id: string;
@@ -24,6 +56,31 @@ export type ProductVariant = {
   metaTitle: string | null;
   metaDescription: string | null;
   features: string[];
+  specification: ProductSpecificationInput | null;
+  variantOptions: ProductVariantOption[];
+  media: ProductMedia[];
+};
+
+export type ProductVariantOption = {
+  id?: string;
+  variantId?: string;
+  attributeId: string;
+  attributeOptionId: string;
+  displayValue: string | null;
+  displayImage: string | null;
+  sortOrder: number;
+};
+
+export type ProductMedia = {
+  id?: string;
+  variantId?: string;
+  url: string;
+  type: "product" | "image" | "video";
+  alt: string | null;
+  isPrimary: boolean;
+  displayOrder: number;
+  videoUrl?: string | null;
+  videoThumbnailUrl?: string | null;
 };
 
 export type Product = {
@@ -53,12 +110,15 @@ export type Product = {
   guaranteeLabel: string | null;
   guaranteeUrl: string | null;
   features: string[];
+  careItems: ProductCareItem[];
+  specification: ProductSpecificationInput | null;
   createdAt: string;
   updatedAt: string;
   variants: ProductVariant[];
 };
 
 export type ProductCategory = { id: string; name: string; slug: string; parentId: string | null; isPublished?: boolean };
+export type ProductBrand = { id: string; name: string; slug: string; isPublished: boolean };
 
 export type ProductVariantInput = {
   name: string;
@@ -79,6 +139,9 @@ export type ProductVariantInput = {
   metaTitle?: string | null;
   metaDescription?: string | null;
   features?: string[];
+  specification?: ProductSpecificationInput;
+  variantOptions?: ProductVariantOption[];
+  media?: ProductMedia[];
 };
 
 export type ProductInput = {
@@ -105,5 +168,7 @@ export type ProductInput = {
   guaranteeLabel?: string | null;
   guaranteeUrl?: string | null;
   features?: string[];
+  careItems?: ProductCareItemInput[];
+  specification?: ProductSpecificationInput;
   variants?: ProductVariantInput[];
 };

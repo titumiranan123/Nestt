@@ -3,6 +3,8 @@ import { OrderStatus, PaymentStatus, Prisma, ReturnStatus } from '@prisma/client
 import { describe, expect, it, vi } from 'vitest';
 import type { OrdersRepository } from './orders.repository.js';
 import { OrdersService } from './orders.service.js';
+import type { CheckoutPhoneService } from './checkout-phone.service.js';
+import type { PaymentConfigService } from '../payments/payment-config.service.js';
 
 function setup() {
   const repository = {
@@ -10,8 +12,12 @@ function setup() {
     listAll: vi.fn(), findById: vi.fn(), updateStatus: vi.fn(), updatePaymentStatus: vi.fn(),
     addRemark: vi.fn(), requestReturn: vi.fn(), updateReturnStatus: vi.fn(), findReturnById: vi.fn(),
     listShippingRates: vi.fn(), saveShippingRate: vi.fn(),
+    findCheckout: vi.fn().mockResolvedValue(null),
+    checkoutPhone: vi.fn().mockResolvedValue('+8801712345678'),
   };
-  return { repository, service: new OrdersService(repository as unknown as OrdersRepository) };
+  const phone = { request: vi.fn(), verify: vi.fn() };
+  const service = new OrdersService(repository as unknown as OrdersRepository, phone as unknown as CheckoutPhoneService, {} as PaymentConfigService, {} as never);
+  return { repository, service, phone };
 }
 
 function prismaError(code: string) {
@@ -25,6 +31,18 @@ describe('OrdersService', () => {
     const input = { items: [], billingSameAsShipping: true } as never;
     await expect(service.create('user-1', input)).resolves.toMatchObject({ orderCode: 'NST-ORDER' });
     expect(repository.createCheckout).toHaveBeenCalledWith('user-1', expect.stringMatching(/^NST-[A-Z0-9]+-[A-F0-9]+$/), input);
+  });
+
+  it('requires checkout phone verification before creating the order', async () => {
+    const { repository, service, phone } = setup();
+    const input = { checkoutId: 'test-checkout', contactEmail: 'customer@example.test', paymentMethod: 'CASH_ON_DELIVERY', code: '123456' } as never;
+    phone.verify.mockRejectedValueOnce(new Error('Invalid code'));
+    await expect(service.create('user-1', input, '127.0.0.1')).rejects.toThrow('Invalid code');
+    expect(repository.createCheckout).not.toHaveBeenCalled();
+    repository.createCheckout.mockResolvedValueOnce({ id: 'order-1' });
+    await expect(service.create('user-1', input, '127.0.0.1')).resolves.toMatchObject({ id: 'order-1' });
+    expect(phone.verify).toHaveBeenCalledWith('user-1', expect.any(String), '+8801712345678', '123456', '127.0.0.1');
+    expect(repository.createCheckout).toHaveBeenCalledWith('user-1', expect.any(String), expect.not.objectContaining({ code: '123456' }), expect.any(String), '+8801712345678');
   });
 
   it('delegates customer lists, returns owned orders, and hides orders not owned by the user', async () => {

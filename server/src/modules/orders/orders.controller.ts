@@ -14,34 +14,70 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import {
   cancelOrderSchema,
-  createOrderSchema,
   listOrdersSchema,
+  quoteOrderSchema,
   requestReturnSchema,
+  storefrontCheckoutSchema,
+  submitCheckoutSchema,
 } from './dto/order.schemas.js';
 import type {
   CancelOrder,
   CreateOrder,
   ListOrders,
+  QuoteOrder,
   RequestReturn,
+  SubmitCheckout,
 } from './dto/order.schemas.js';
 import { OrdersService } from './orders.service.js';
+import { SslCheckoutService } from './ssl-checkout.service.js';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(private readonly orders: OrdersService, private readonly ssl: SslCheckoutService) {}
 
   @Get('delivery-areas')
   deliveryAreas() {
     return this.orders.listDeliveryAreas();
   }
 
+  @Post('quote')
+  quote(
+    @Req() req: AuthRequest,
+    @Body(new ZodValidationPipe(quoteOrderSchema)) body: QuoteOrder,
+  ) {
+    return this.orders.quote(req.authUserId, body);
+  }
+
+  @Get('checkout/:checkoutId')
+  recoverCheckout(@Req() req: AuthRequest, @Param('checkoutId', ParseUUIDPipe) checkoutId: string) {
+    return this.orders.recoverCheckout(req.authUserId, checkoutId);
+  }
+
   @Post()
   create(
     @Req() req: AuthRequest,
-    @Body(new ZodValidationPipe(createOrderSchema)) body: CreateOrder,
+    @Body(new ZodValidationPipe(submitCheckoutSchema)) body: SubmitCheckout,
   ) {
-    return this.orders.create(req.authUserId, body);
+    return this.orders.create(req.authUserId, body, req.ip ?? 'unknown');
+  }
+
+  @Post('otp')
+  requestCheckoutCode(
+    @Req() req: AuthRequest,
+    @Body(new ZodValidationPipe(storefrontCheckoutSchema)) body: CreateOrder,
+  ) {
+    return this.orders.requestCheckoutCode(req.authUserId, body, req.ip ?? 'unknown');
+  }
+
+  @Post(':id/payment')
+  startPayment(@Req() req: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ssl.start(req.authUserId, id);
+  }
+
+  @Post(':id/payment/check')
+  async checkPayment(@Req() req: AuthRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return { outcome: await this.ssl.check(id, req.authUserId) };
   }
 
   @Get()

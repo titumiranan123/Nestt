@@ -32,6 +32,8 @@ import { RedisAuthStore } from './redis-auth-store.service.js';
     TokenService,
     AuthCrypto,
     RedisAuthStore,
+    OtpService,
+    AuthService,
   ],
 })
 export class AuthModule {}

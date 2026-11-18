@@ -1,340 +1,230 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import { createInitialState, products } from "@/lib/account/data";
-import type { AccountState, Address, Profile } from "@/lib/account/types";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCart } from "@/components/cart/CartProvider";
+import { accountApi, AccountApiError, accountSessionEnded } from "@/lib/account/api";
+import type { AccountState, Address, CustomerOrder, Profile } from "@/lib/account/types";
 
-const key = "nestt.account.preview.v1";
-type Toast = { message: string; undo?: () => void };
+const empty: AccountState = {
+  profile: { id: "", name: "", email: "", phone: "", isEmailVerified: false, isPhoneVerified: false },
+  orders: [], addresses: [], wishlist: [],
+};
+
 type AccountContextValue = {
   state: AccountState;
-  ready: boolean;
-  storageError: boolean;
-  toast: Toast | null;
-  bagOpen: boolean;
-  setBagOpen: (open: boolean) => void;
-  notify: (message: string, undo?: () => void) => void;
+  session: "loading" | "signed-out" | "signed-in" | "error";
+  loadError: string;
+  busy: boolean;
+  toast: { message: string; error?: boolean } | null;
+  reload: () => Promise<void>;
+  notify: (message: string, error?: boolean) => void;
   dismissToast: () => void;
-  toggleWishlist: (id: string) => void;
-  addToBag: (productId: string, option: string, quantity?: number) => boolean;
-  updateBag: (index: number, quantity: number) => void;
-  saveAddress: (address: Address) => void;
-  deleteAddress: (id: string) => void;
-  makeDefault: (id: string) => void;
-  saveProfile: (profile: Profile) => void;
-  signOut: () => void;
-  resume: () => void;
-  cancelOrder: (id: string, reason: string) => void;
-  returnItem: (
-    id: string,
-    itemId: string,
-    reason: string,
-    note: string,
-  ) => void;
+  removeWish: (variantId: string) => Promise<boolean>;
+  addToBag: (variantId: string, quantity: number) => boolean;
+  buyAgain: (order: CustomerOrder) => Promise<boolean>;
+  saveAddress: (address: Address) => Promise<boolean>;
+  deleteAddress: (id: string) => Promise<boolean>;
+  makeDefault: (id: string) => Promise<boolean>;
+  saveProfile: (name: string) => Promise<boolean>;
+  setProfile: (profile: Profile) => void;
+  signOut: () => Promise<boolean>;
+  cancelOrder: (id: string, reason: string) => Promise<boolean>;
+  returnItem: (id: string, itemId: string, reason: string) => Promise<boolean>;
 };
+
 const AccountContext = createContext<AccountContextValue | null>(null);
 
-function validState(value: unknown): value is AccountState {
-  if (!value || typeof value !== "object") return false;
-  const s = value as AccountState;
-  return (
-    s.version === 1 &&
-    typeof s.signedOut === "boolean" &&
-    !!s.profile &&
-    typeof s.profile.name === "string" &&
-    typeof s.profile.email === "string" &&
-    typeof s.profile.phone === "string" &&
-    Array.isArray(s.orders) &&
-    s.orders.every(
-      (o) =>
-        typeof o.id === "string" &&
-        Array.isArray(o.items) &&
-        Array.isArray(o.returns) &&
-        !!o.shipping,
-    ) &&
-    Array.isArray(s.addresses) &&
-    s.addresses.every(
-      (a) => typeof a.id === "string" && typeof a.fullName === "string",
-    ) &&
-    Array.isArray(s.wishlist) &&
-    s.wishlist.every((id) => typeof id === "string") &&
-    Array.isArray(s.bag) &&
-    s.bag.every(
-      (i) =>
-        typeof i.productId === "string" &&
-        typeof i.option === "string" &&
-        Number.isInteger(i.quantity) &&
-        i.quantity > 0,
-    )
-  );
-}
+const errorMessage = (error: unknown) =>
+  error instanceof AccountApiError ? error.message : "Could not reach your account. Please try again.";
 
 export function AccountProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AccountState>(createInitialState);
-  const [ready, setReady] = useState(false);
-  const [storageError, setStorageError] = useState(false);
-  const [toast, setToast] = useState<Toast | null>(null);
-  const [bagOpen, setBagOpen] = useState(false);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw);
-        if (validState(parsed)) setState(parsed);
-        else setStorageError(true);
-      }
-    } catch {
-      setStorageError(true);
-    }
-    setReady(true);
+  const [state, setState] = useState(empty);
+  const [session, setSession] = useState<AccountContextValue["session"]>("loading");
+  const [loadError, setLoadError] = useState("");
+  const [toast, setToast] = useState<AccountContextValue["toast"]>(null);
+  const [busy, setBusy] = useState(false);
+  const generation = useRef(0);
+  const mutation = useRef(false);
+  const sessionChannel = useRef<BroadcastChannel | null>(null);
+  const { addItem, addItems, items: cartItems } = useCart();
+
+  const endSession = useCallback(() => {
+    generation.current++;
+    setState(empty);
+    setToast(null);
+    setLoadError("");
+    setSession("signed-out");
   }, []);
-  useEffect(() => {
-    if (ready) {
-      try {
-        localStorage.setItem(key, JSON.stringify(state));
-      } catch {
-        setStorageError(true);
+
+  const reload = useCallback(async () => {
+    const attempt = ++generation.current;
+    setSession("loading");
+    setLoadError("");
+    try {
+      const profile = await accountApi.profile();
+      const [orders, addresses, wishlist] = await Promise.all([
+        accountApi.orders(), accountApi.addresses(), accountApi.wishlist(),
+      ]);
+      if (attempt !== generation.current) return;
+      setState({ profile, orders, addresses, wishlist });
+      setSession("signed-in");
+    } catch (error) {
+      if (attempt !== generation.current) return;
+      if (error instanceof AccountApiError && error.status === 401) {
+        endSession();
+        return;
       }
+      setState(empty);
+      setLoadError(errorMessage(error));
+      setSession("error");
     }
-  }, [state, ready]);
+  }, [endSession]);
+
+  useEffect(() => {
+    window.addEventListener(accountSessionEnded, endSession);
+    const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("nestt-customer-account");
+    sessionChannel.current = channel;
+    if (channel) channel.onmessage = (event) => { if (event.data === "signed-out") endSession(); };
+    void reload();
+    return () => {
+      generation.current++;
+      window.removeEventListener(accountSessionEnded, endSession);
+      channel?.close();
+      sessionChannel.current = null;
+    };
+  }, [endSession, reload]);
+
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), toast.undo ? 10000 : 5000);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setToast(null), 6_000);
+    return () => window.clearTimeout(timer);
   }, [toast]);
-  const notify = useCallback(
-    (message: string, undo?: () => void) => setToast({ message, undo }),
-    [],
-  );
-  const toggleWishlist = (id: string) => {
-    const removed = state.wishlist.includes(id);
-    setState((s) => ({
-      ...s,
-      wishlist: removed
-        ? s.wishlist.filter((p) => p !== id)
-        : [...s.wishlist, id],
-    }));
-    notify(
-      removed ? "Removed from your wishlist." : "Saved to your wishlist.",
-      removed
-        ? () => {
-            setState((s) => ({
-              ...s,
-              wishlist: s.wishlist.includes(id)
-                ? s.wishlist
-                : [...s.wishlist, id],
-            }));
-            setToast(null);
-          }
-        : undefined,
-    );
-  };
-  const addToBag = (productId: string, option: string, quantity = 1) => {
-    const p = products.find((p) => p.id === productId);
-    const existing = state.bag.find(
-      (i) => i.productId === productId && i.option === option,
-    );
-    const total = state.bag
-      .filter((i) => i.productId === productId)
-      .reduce((n, i) => n + i.quantity, 0);
-    if (
-      !p ||
-      !p.options.includes(option) ||
-      !Number.isInteger(quantity) ||
-      quantity < 1 ||
-      total + quantity > p.stock
-    ) {
-      notify("This quantity is not available. Please update your bag.");
+
+  const notify = useCallback((message: string, error = false) => setToast({ message, error }), []);
+
+  async function mutate(action: () => Promise<void>, success?: string) {
+    if (mutation.current) return false;
+    const attempt = generation.current;
+    mutation.current = true;
+    setBusy(true);
+    try {
+      await action();
+      if (success && attempt === generation.current) notify(success);
+      return true;
+    } catch (error) {
+      if (attempt === generation.current) notify(errorMessage(error), true);
+      return false;
+    } finally {
+      mutation.current = false;
+      setBusy(false);
+    }
+  }
+
+  function updateState(update: (current: AccountState) => AccountState) {
+    setState((current) => current.profile.id ? update(current) : current);
+  }
+
+  function setProfile(profile: Profile) {
+    updateState((current) => ({ ...current, profile }));
+  }
+
+  async function refreshAfter(section: "addresses" | "orders") {
+    const attempt = generation.current;
+    try {
+      if (section === "addresses") {
+        const addresses = await accountApi.addresses();
+        updateState((current) => ({ ...current, addresses }));
+      } else {
+        const orders = await accountApi.orders();
+        updateState((current) => ({ ...current, orders }));
+      }
+      if (attempt === generation.current) setLoadError("");
+    } catch {
+      if (attempt === generation.current) setLoadError("Your change was saved. Reload your account to see updated details.");
+    }
+  }
+
+  function addToBag(variantId: string, quantity: number) {
+    const product = state.wishlist.find((item) => item.variantId === variantId);
+    const existing = cartItems.find((item) => "variantId" in item && item.variantId === variantId)?.quantity ?? 0;
+    if (!product?.canAddToCart || !Number.isInteger(quantity) || quantity < 1 || existing + quantity > product.stock) {
+      notify("This quantity or finish isn’t available in your cart.", true);
       return false;
     }
-    setState((s) => ({
-      ...s,
-      bag: existing
-        ? s.bag.map((i) =>
-            i.productId === productId && i.option === option
-              ? { ...i, quantity: i.quantity + quantity }
-              : i,
-          )
-        : [...s.bag, { productId, option, quantity }],
-    }));
-    setBagOpen(true);
-    notify("Added to your demo bag.");
-    return true;
-  };
-  const saveAddress = (address: Address) => {
-    setState((s) => {
-      const editing = s.addresses.some((a) => a.id === address.id);
-      const list = editing
-        ? s.addresses.map((a) => (a.id === address.id ? address : a))
-        : [...s.addresses, address];
-      const shipping = address.isDefaultShipping
-        ? address.id
-        : (list.find((a) => a.id !== address.id && a.isDefaultShipping)?.id ??
-          address.id);
-      const billing = address.isDefaultBilling
-        ? address.id
-        : (list.find((a) => a.id !== address.id && a.isDefaultBilling)?.id ??
-          address.id);
-      return {
-        ...s,
-        addresses: list.map((a) => ({
-          ...a,
-          isDefaultShipping: a.id === shipping,
-          isDefaultBilling: a.id === billing,
-        })),
-      };
-    });
-    notify("Address saved in this browser.");
-  };
+    try {
+      addItem(variantId, quantity, product.stock);
+      return true;
+    } catch {
+      notify("Could not save to your cart. Check your browser storage settings.", true);
+      return false;
+    }
+  }
+
   const value: AccountContextValue = {
-    state,
-    ready,
-    storageError,
-    toast,
-    bagOpen,
-    setBagOpen,
-    notify,
+    state, session, loadError, busy, toast, reload, notify, setProfile,
     dismissToast: () => setToast(null),
-    toggleWishlist,
+    removeWish: (variantId) => mutate(async () => {
+      await accountApi.removeWish(variantId);
+      updateState((current) => ({
+        ...current, wishlist: current.wishlist.filter((item) => item.variantId !== variantId),
+      }));
+    }, "Removed from your wishlist."),
     addToBag,
-    saveAddress,
-    updateBag: (index, quantity) => {
-      const item = state.bag[index];
-      if (!item) return;
-      const p = products.find((p) => p.id === item.productId);
-      const others = state.bag
-        .filter((i, n) => n !== index && i.productId === item.productId)
-        .reduce((n, i) => n + i.quantity, 0);
-      if (
-        !Number.isInteger(quantity) ||
-        quantity < 0 ||
-        !p ||
-        quantity + others > p.stock
-      ) {
-        notify("Requested quantity exceeds available stock.");
-        return;
+    buyAgain: (order) => mutate(async () => {
+      const response = await fetch("/api/products", { cache: "no-store" });
+      if (!response.ok) throw new AccountApiError("Could not check current catalog stock.", response.status);
+      const products: {
+        id: string; isPriceOnRequest?: boolean;
+        variants?: { id: string; isDefault?: boolean; stockQty: number; stockStatus: string }[];
+      }[] = await response.json();
+      const offers = new Map(products.flatMap((product) => product.isPriceOnRequest ? [] :
+        (product.variants ?? []).map((variant) => [variant.id, variant] as const),
+      ));
+      const quantities = new Map<string, number>();
+      for (const item of order.items) {
+        const offer = item.variantId ? offers.get(item.variantId) : undefined;
+        if (!offer) throw new AccountApiError(`${item.name} is no longer available to reorder with the same finish.`, 409);
+        const quantity = (quantities.get(offer.id) ?? 0) + item.quantity;
+        const existing = cartItems.find((entry) => "variantId" in entry && entry.variantId === offer.id)?.quantity ?? 0;
+        if (!["IN_STOCK", "LOW_STOCK"].includes(offer.stockStatus) || quantity + existing > offer.stockQty) {
+          throw new AccountApiError(`There isn’t enough stock to reorder ${item.name}.`, 409);
+        }
+        quantities.set(offer.id, quantity);
       }
-      setState((s) => ({
-        ...s,
-        bag:
-          quantity === 0
-            ? s.bag.filter((_, n) => n !== index)
-            : s.bag.map((i, n) => (n === index ? { ...i, quantity } : i)),
-      }));
-    },
-    deleteAddress: (id) => {
-      setState((s) => {
-        const list = s.addresses.filter((a) => a.id !== id);
-        return {
-          ...s,
-          addresses: list.map((a, i) => ({
-            ...a,
-            isDefaultShipping:
-              a.isDefaultShipping ||
-              (!list.some((a) => a.isDefaultShipping) && i === 0),
-            isDefaultBilling:
-              a.isDefaultBilling ||
-              (!list.some((a) => a.isDefaultBilling) && i === 0),
-          })),
-        };
-      });
-      notify("Address deleted.");
-    },
-    makeDefault: (id) => {
-      setState((s) => ({
-        ...s,
-        addresses: s.addresses.map((a) => ({
-          ...a,
-          isDefaultShipping: a.id === id,
-        })),
-      }));
-      notify("Default delivery address updated.");
-    },
-    saveProfile: (profile) => {
-      setState((s) => ({
-        ...s,
-        profile: {
-          ...profile,
-          isEmailVerified:
-            profile.email === s.profile.email && s.profile.isEmailVerified,
-          isPhoneVerified:
-            profile.phone === s.profile.phone && s.profile.isPhoneVerified,
-        },
-      }));
-      notify("Your profile has been updated in this browser.");
-    },
-    signOut: () => {
-      setState((s) => ({ ...s, signedOut: true }));
-      setBagOpen(false);
-      setToast(null);
-    },
-    resume: () => setState((s) => ({ ...s, signedOut: false })),
-    cancelOrder: (id, reason) => {
-      const o = state.orders.find((o) => o.id === id);
-      if (
-        !o ||
-        !["PENDING", "CONFIRMED", "PROCESSING"].includes(o.status) ||
-        o.payment === "PAID"
-      ) {
-        notify("This order cannot be cancelled. Please contact our team.");
-        return;
-      }
-      setState((s) => ({
-        ...s,
-        orders: s.orders.map((o) =>
-          o.id === id ? { ...o, status: "CANCELLED", cancelReason: reason } : o,
-        ),
-      }));
-      notify("Demo order cancelled.");
-    },
-    returnItem: (id, itemId, reason, note) => {
-      const o = state.orders.find((o) => o.id === id);
-      if (
-        !o ||
-        o.status !== "DELIVERED" ||
-        !o.items.some((i) => i.id === itemId) ||
-        o.returns.some((r) => r.itemId === itemId)
-      ) {
-        notify("This item cannot be returned. Please check your order.");
-        return;
-      }
-      const reference = `RET-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      setState((s) => ({
-        ...s,
-        orders: s.orders.map((o) =>
-          o.id === id
-            ? {
-                ...o,
-                returns: [
-                  ...o.returns,
-                  {
-                    itemId,
-                    reason,
-                    note,
-                    reference,
-                    date: new Date().toISOString().slice(0, 10),
-                  },
-                ],
-              }
-            : o,
-        ),
-      }));
-      notify(
-        `Demo return recorded: ${reference}. No pickup has been scheduled.`,
-      );
-    },
+      addItems([...quantities].map(([variantId, quantity]) => ({ variantId, quantity, stockLimit: offers.get(variantId)!.stockQty })));
+    }),
+    saveAddress: (address) => mutate(async () => {
+      await accountApi.saveAddress(address);
+      await refreshAfter("addresses");
+    }, "Address saved."),
+    deleteAddress: (id) => mutate(async () => {
+      await accountApi.deleteAddress(id);
+      await refreshAfter("addresses");
+    }, "Address deleted."),
+    makeDefault: (id) => mutate(async () => {
+      await accountApi.setDefaultAddress(id);
+      await refreshAfter("addresses");
+    }, "Default delivery address updated."),
+    saveProfile: (name) => mutate(async () => {
+      setProfile(await accountApi.updateProfile(name));
+    }, "Your profile has been updated."),
+    signOut: () => mutate(async () => {
+      await accountApi.signOut();
+      endSession();
+      sessionChannel.current?.postMessage("signed-out");
+    }),
+    cancelOrder: (id, reason) => mutate(async () => {
+      await accountApi.cancelOrder(id, reason);
+      await refreshAfter("orders");
+    }, "Order cancelled."),
+    returnItem: (id, itemId, reason) => mutate(async () => {
+      await accountApi.returnItem(id, itemId, reason);
+    }, "Your return request has been sent."),
   };
-  return (
-    <AccountContext.Provider value={value}>{children}</AccountContext.Provider>
-  );
+
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
 }
+
 export function useAccount() {
   const value = useContext(AccountContext);
   if (!value) throw new Error("useAccount must be used inside AccountProvider");

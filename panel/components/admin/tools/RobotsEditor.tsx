@@ -6,6 +6,7 @@ import { RobotsEditorPanel } from "@/components/admin/tools/RobotsEditorPanel";
 import { RobotsHealthPanel } from "@/components/admin/tools/RobotsHealthPanel";
 import { SeoPageHeader } from "@/components/admin/tools/SeoPageHeader";
 import { SeoSubmitButton } from "@/components/admin/tools/SeoSubmitButton";
+import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
 
 export function RobotsEditor() {
   const query = useSeoFile("robots");
@@ -22,7 +23,7 @@ export function RobotsEditor() {
   };
   const copy = async () => navigator.clipboard.writeText(content);
 
-  if (query.isPending) return <div className="-mx-3 -my-5 min-h-full bg-white px-3 py-5 text-sm text-gray-500 sm:-mx-5 sm:-my-6 sm:px-5 sm:py-6 lg:-mx-8 lg:-my-6 lg:px-8 lg:py-6">Loading robots.txt…</div>;
+  if (query.isPending) return <AdminLoadingSkeleton kind="editor" label="Loading robots.txt" />;
 
   return <div className="-mx-3 -my-5 min-h-full animate-fade-up bg-white px-3 py-5 sm:-mx-5 sm:-my-6 sm:px-5 sm:py-6 lg:-mx-8 lg:-my-6 lg:px-8 lg:py-6">
     <SeoPageHeader active="/admin/seo/robots" title="Robots.txt" description="Control which parts of the storefront search crawlers can access."/>

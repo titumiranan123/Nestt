@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { siteFont } from "@/lib/fonts";
+import type { CatalogProduct } from "@/lib/catalog";
 import { ArIcon } from "@/components/shared/ArIcon";
 import {
   HomePageBagIcon,
@@ -13,48 +14,55 @@ import {
   HomePageSearchIcon,
   HomePageUserIcon,
 } from "@/components/home-page/nestt-furniture-home-page-icons";
-import {
-  recommendedHomePageProducts,
-  freshArrivalHomePageProducts,
-} from "@/components/home-page/nestt-furniture-home-page-content";
 import { MegaMenu } from "./MegaMenu";
 import { MobileMenu } from "./MobileMenu";
 import { navigationItems } from "./navigation-data";
+import { useCart } from "@/components/cart/CartProvider";
 
-const products = [
-  ...recommendedHomePageProducts.map((product) => ({
-    ...product,
-    href: "/#recommended",
-  })),
-  ...freshArrivalHomePageProducts.map((product) => ({
-    ...product,
-    href: "/#fresh-arrivals",
-  })),
-];
+export function Navbar() {
+  return (
+    <Suspense fallback={<NavbarContent />}>
+      <RoutedNavbar />
+    </Suspense>
+  );
+}
 
-export function Navbar({
-  variant = "default",
-  onBagClick,
-}: {
-  variant?: "default" | "hero" | "product";
-  onBagClick?: () => void;
-}) {
-  const router = useRouter();
-  const isHero = variant === "hero";
-  const isProduct = variant === "product";
-  const usesBrandAsset = isHero;
+function RoutedNavbar() {
+  const pathname = usePathname();
+  return <NavbarContent key={pathname} overHero={pathname === "/"} />;
+}
+
+function NavbarContent({ overHero = false }: { overHero?: boolean }) {
+  const { openCart, count } = useCart();
+  const iconHover = overHero ? "hover:bg-white/10" : "hover:bg-[#f6f5f2]";
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchProducts, setSearchProducts] = useState<CatalogProduct[]>();
+  const [searchError, setSearchError] = useState(false);
   const root = useRef<HTMLElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeItem = navigationItems.find((item) => item.id === activeMenu);
-  const matches = products.filter((product) =>
-    `${product.name} ${product.category}`
+  const matches = (searchProducts ?? []).filter((product) =>
+    `${product.name} ${product.category?.name ?? ""}`
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
+
+  useEffect(() => {
+    if (!searchOpen || searchProducts) return;
+    const controller = new AbortController();
+    setSearchError(false);
+    void fetch("/api/products", { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("Catalog unavailable");
+      const data: CatalogProduct[] = await response.json();
+      if (!controller.signal.aborted) setSearchProducts(data);
+    }).catch(() => {
+      if (!controller.signal.aborted) setSearchError(true);
+    });
+    return () => controller.abort();
+  }, [searchOpen, searchProducts]);
 
   function cancelClose() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -101,7 +109,7 @@ export function Navbar({
   return (
     <header
       ref={root}
-      className={`${siteFont.className} ${isHero ? "absolute inset-x-0 top-0 z-50 border-b border-white/10 bg-transparent text-white" : "sticky top-0 z-50 border-b border-[#e9e7e2] bg-white text-[#252522]"}`}
+      className={`${siteFont.className} inset-x-0 top-0 z-50 border-b ${overHero ? "absolute border-white/10 bg-transparent text-white" : "sticky border-[#e9e7e2] bg-white text-[#252522]"}`}
       onPointerEnter={cancelClose}
       onPointerLeave={(event) => {
         if (event.pointerType === "mouse")
@@ -123,35 +131,19 @@ export function Navbar({
         }
       }}
     >
-      <div
-        className={`relative z-10 mx-auto flex ${isProduct ? "h-[52px] gap-2 px-5 md:gap-3" : "h-16 gap-5 px-5 lg:gap-6 lg:px-8"} max-w-[1600px] items-center ${isHero ? "gap-0 bg-transparent" : "bg-white"}`}
-      >
-        <a
-          href={isHero ? "#home" : "/"}
+      <div className="relative z-10 mx-auto flex h-16 max-w-[1600px] items-center px-5 lg:px-8">
+        <Link
+          href={overHero ? "/#home" : "/"}
           aria-label="Nestt home"
           onClick={closeNavigation}
           className="shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f15a22]"
         >
-          {usesBrandAsset ? (
-            <Image
-              src="/assets/figma-home/hero-logo.png"
-              alt="Nestt"
-              width={136}
-              height={36}
-              priority
-              className="h-9 w-[136px] object-cover"
-            />
-          ) : (
-            <span
-              className={`font-bold leading-none tracking-[-0.055em] text-[#f15a22] ${isProduct ? "text-[26px] md:text-[29px]" : "text-[30px] lg:text-[34px]"}`}
-            >
-              NESTT
-            </span>
-          )}
-        </a>
+          <Image src="/assets/figma-home/hero-logo.png" alt="" width={136} height={36} preload
+            className="h-9 w-[136px] object-cover" />
+        </Link>
 
         <div
-          className={`relative hidden shrink-0 sm:block ${isHero ? "ml-[31px] mr-auto" : isProduct ? "mr-auto" : "mr-auto"}`}
+          className="relative ml-[31px] mr-auto hidden shrink-0 sm:block"
         >
           <form
             role="search"
@@ -160,10 +152,10 @@ export function Navbar({
               setSearchOpen(true);
               setActiveMenu(null);
             }}
-            className={`flex h-[36px] items-center border focus-within:border-white/40 ${isProduct ? "w-[78px] md:w-[98px]" : "w-[138px] min-[1500px]:w-[180px]"} ${isHero ? "border-white/10 bg-black/10" : "border-[#e9e7e2] bg-[#f8f7f5] focus-within:border-[#aaa69f]"}`}
+            className={`flex h-9 w-[138px] items-center border min-[1500px]:w-[180px] ${overHero ? "border-white/10 bg-black/10 focus-within:border-white/40" : "border-[#e9e7e2] bg-[#f8f7f5] focus-within:border-[#aaa69f]"}`}
           >
             <HomePageSearchIcon
-              className={`ml-3 size-[18px] shrink-0 ${isHero ? "text-white/65" : "text-[#85817a]"}`}
+              className={`ml-3 size-[18px] shrink-0 ${overHero ? "text-white/65" : "text-[#85817a]"}`}
             />
             <input
               type="search"
@@ -182,14 +174,14 @@ export function Navbar({
               onKeyDown={(event) => {
                 if (event.key === "Escape") setSearchOpen(false);
               }}
-              className={`min-w-0 flex-1 bg-transparent px-2 text-[13px] leading-6 outline-none ${isHero ? "placeholder:text-white/60" : "placeholder:text-[#8d8982]"}`}
+              className={`min-w-0 flex-1 bg-transparent px-2 text-[13px] leading-6 outline-none ${overHero ? "placeholder:text-white/60" : "placeholder:text-[#8d8982]"}`}
             />
           </form>
           {searchOpen && (
-            <div className="absolute left-0 top-[calc(100%+18px)] w-[min(350px,80vw)] border border-[#e9e7e2] bg-white p-4 shadow-xl">
+            <div className="absolute left-0 top-[calc(100%+18px)] w-[min(350px,80vw)] border border-[#e9e7e2] bg-white p-4 text-[#252522] shadow-xl">
               <div className="mb-3 flex items-center justify-between gap-4">
                 <p className="text-xs text-[#85817a]">
-                  {query ? `Results for “${query}”` : "Popular furniture"}
+                  {query ? `Results for “${query}”` : "Furniture suggestions"}
                 </p>
                 <button
                   type="button"
@@ -203,22 +195,23 @@ export function Navbar({
               <ul>
                 {matches.length ? (
                   matches.slice(0, 5).map((product) => (
-                    <li key={product.name}>
-                      <a
-                        href={product.href}
+                    <li key={product.id}>
+                      <Link
+                        href={`/products/${encodeURIComponent(product.slug)}`}
+                        prefetch={false}
                         onClick={closeNavigation}
                         className="block cursor-pointer px-2 py-3 text-sm hover:bg-[#f6f5f2] focus-visible:outline-2 focus-visible:outline-[#f4131b]"
                       >
                         {product.name}
                         <span className="mt-1 block text-xs text-[#85817a]">
-                          {product.category}
+                          {product.category?.name}
                         </span>
-                      </a>
+                      </Link>
                     </li>
                   ))
                 ) : (
                   <li className="py-3 text-sm text-[#85817a]">
-                    No furniture found. Try “bed” or “chair”.
+                    {searchError ? "Furniture search is unavailable." : searchProducts ? "No furniture found. Try “bed” or “chair”." : "Loading furniture…"}
                   </li>
                 )}
               </ul>
@@ -228,7 +221,7 @@ export function Navbar({
 
         <nav
           aria-label="Main navigation"
-          className={`mx-auto hidden h-full items-center ${isProduct ? "gap-2 md:flex min-[1100px]:gap-5" : "gap-5 xl:flex min-[1400px]:gap-7"} ${isHero ? "text-white" : ""}`}
+          className="mx-auto hidden h-full items-center gap-5 xl:flex min-[1400px]:gap-7"
         >
           {navigationItems.map((item) => (
             <button
@@ -254,46 +247,40 @@ export function Navbar({
                   );
                 }
               }}
-              className={`relative inline-flex h-full cursor-pointer items-center gap-1.5 whitespace-nowrap font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#f15a22] after:transition-transform hover:text-[#f15a22] focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#f15a22] ${isProduct ? "text-[9px] md:text-[10px] min-[1100px]:text-[14px]" : "text-[14px]"} ${activeMenu === item.id ? "text-[#f15a22] after:scale-x-100" : "after:scale-x-0"}`}
+              className={`relative inline-flex h-full cursor-pointer items-center gap-1.5 whitespace-nowrap text-sm font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#f15a22] after:transition-transform hover:text-[#f15a22] focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#f15a22] ${activeMenu === item.id ? "text-[#f15a22] after:scale-x-100" : "after:scale-x-0"}`}
             >
               {item.label}
-              {(!isProduct || item.id === "more") && (
-                <HomePageChevronDownIcon
-                  className={`size-3 transition-transform ${activeMenu === item.id ? "rotate-180" : ""}`}
-                />
-              )}
+              <HomePageChevronDownIcon className={`size-3 transition-transform ${activeMenu === item.id ? "rotate-180" : ""}`} />
             </button>
           ))}
         </nav>
 
-        <div
-          className={`ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3 ${isHero ? "text-white" : ""}`}
-        >
-          <a
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <Link
             href="/ar"
             onClick={closeNavigation}
             aria-label="Explore augmented reality furniture"
-            className="hidden size-9 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22] sm:flex"
+            className={`hidden size-9 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-[#f15a22] sm:flex ${iconHover}`}
           >
             <ArIcon className="size-[22px]" />
-          </a>
+          </Link>
           <button
             type="button"
             onClick={() => {
               closeNavigation();
-              if (onBagClick) onBagClick();
-              else router.push("/account?bag=1");
+              openCart();
             }}
             aria-label="Open shopping bag"
-            className="flex size-9 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22]"
+            className={`relative flex size-9 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-[#f15a22] ${iconHover}`}
           >
             <HomePageBagIcon className="size-[22px]" />
+            {count > 0 && <span className="absolute ml-6 mt-[-23px] flex size-[16px] items-center justify-center rounded-full bg-[#f15a22] text-[9px] font-semibold text-white">{count > 9 ? "9+" : count}</span>}
           </button>
           <Link
             href="/account"
             onClick={closeNavigation}
             aria-label="Open your account dashboard"
-            className="flex size-9 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22]"
+            className={`flex size-9 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-[#f15a22] ${iconHover}`}
           >
             <HomePageUserIcon className="size-[22px]" />
           </Link>
@@ -309,7 +296,7 @@ export function Navbar({
               setSearchOpen(false);
               setActiveMenu(null);
             }}
-            className={`flex size-10 cursor-pointer items-center justify-center hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#f15a22] ${isProduct ? "md:hidden" : "xl:hidden"}`}
+            className={`flex size-10 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-[#f15a22] xl:hidden ${iconHover}`}
           >
             {mobileMenuOpen ? (
               <span className="text-3xl">×</span>
@@ -337,7 +324,7 @@ export function Navbar({
             if (event.pointerType === "mouse" && !mobileMenuOpen)
               setActiveMenu(null);
           }}
-          className={`fixed inset-x-0 bottom-0 top-[76px] -z-10 bg-black/20 ${mobileMenuOpen ? "xl:hidden" : "hidden xl:block"}`}
+          className={`fixed inset-x-0 bottom-0 top-[65px] -z-10 bg-black/20 ${mobileMenuOpen ? "xl:hidden" : "hidden xl:block"}`}
         />
       )}
     </header>

@@ -63,7 +63,7 @@ describe('OtpService delivery handling', () => {
     expect(crypto.newCode).toHaveBeenCalledTimes(2);
   });
 
-  it('sends email verification links for verify and link purposes', async () => {
+  it('sends a signup verification link and keeps account-linking codes in the message', async () => {
     const { service, mail } = setup();
     await service.sendChallenge(ChallengePurpose.VERIFY_EMAIL, 'a+b@example.com');
     await service.sendChallenge(ChallengePurpose.LINK_EMAIL, 'user@example.com', 'user-id');
@@ -72,25 +72,25 @@ describe('OtpService delivery handling', () => {
       'a+b@example.com',
       'Verify your Nestt email',
       '123456',
-      'https://nestt.example/verify-email?email=a%2Bb%40example.com&code=123456',
+      'https://nestt.example/verify-email',
     );
     expect(mail.sendVerificationEmail).toHaveBeenNthCalledWith(
       2,
       'user@example.com',
       'Verify your Nestt email',
       '123456',
-      'https://nestt.example/verify-email?email=user%40example.com&code=123456',
+      undefined,
     );
   });
 
-  it('sends password reset email without a verification link', async () => {
+  it('sends a password reset page link and a separate verification code', async () => {
     const { service, mail } = setup();
     await service.sendChallenge(ChallengePurpose.RESET_PASSWORD, 'user@example.com');
     expect(mail.sendVerificationEmail).toHaveBeenCalledWith(
       'user@example.com',
       'Reset your Nestt password',
       '123456',
-      undefined,
+      'https://nestt.example/reset-password',
     );
   });
 

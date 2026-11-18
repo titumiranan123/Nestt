@@ -15,7 +15,6 @@ const sections: Record<
     fields: { key: string; label: string; placeholder?: string; secret?: boolean }[];
     toggle: string;
     toggleDescription: string;
-    sandbox?: boolean;
   }
 > = {
   ssl: {
@@ -27,7 +26,6 @@ const sections: Record<
     ],
     toggle: 'Enable SSL Commerz',
     toggleDescription: 'Allow customers to pay via SSL Commerz.',
-    sandbox: true,
   },
 };
 
@@ -35,10 +33,12 @@ export default function PaymentGatewayFields({
   gateway,
   values,
   onChange,
+  credentialsConfigured = false,
 }: {
   gateway: GatewayId;
   values: GatewayData;
   onChange: (key: string, value: string | boolean) => void;
+  credentialsConfigured?: boolean;
 }) {
   const config = sections[gateway];
   const [visible, setVisible] = useState<Record<string, boolean>>({});
@@ -58,7 +58,7 @@ export default function PaymentGatewayFields({
                 value={String(values[field.key] ?? '')}
                 onChange={(event) => onChange(field.key, event.target.value)}
                 type={field.secret && !visible[field.key] ? 'password' : 'text'}
-                placeholder={field.placeholder}
+                placeholder={field.secret && credentialsConfigured ? 'Leave blank to keep the saved password' : field.placeholder}
                 className={`${settingsInput} ${field.secret ? 'pr-10' : ''}`}
               />
               {field.secret && (

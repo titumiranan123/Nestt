@@ -25,6 +25,10 @@ export class OtpService {
     return this.crypto.codeHash(purpose, target, code);
   }
 
+  assertPhoneDelivery() {
+    this.sms.assertAvailable();
+  }
+
   async enforceLimit(
     action: string,
     target: string,
@@ -53,6 +57,7 @@ export class OtpService {
     purpose: ChallengePurpose,
     target: string,
     userId?: string,
+    smsRecipient = target,
   ): Promise<void> {
     const code = this.crypto.newCode();
     const codeHash = this.crypto.codeHash(purpose, target, code);
@@ -65,19 +70,24 @@ export class OtpService {
     try {
       if (
         purpose === ChallengePurpose.PHONE_LOGIN ||
-        purpose === ChallengePurpose.LINK_PHONE
+        purpose === ChallengePurpose.CUSTOMER_PHONE_SIGNUP ||
+        purpose === ChallengePurpose.CUSTOMER_PHONE_LOGIN ||
+        purpose === ChallengePurpose.RESET_PHONE_PASSWORD ||
+        purpose === ChallengePurpose.LINK_PHONE ||
+        purpose === ChallengePurpose.CHECKOUT_PHONE
       ) {
-        await this.sms.sendVerificationCode(target, code);
+        await this.sms.sendVerificationCode(smsRecipient, code);
       } else {
         const subject =
           purpose === ChallengePurpose.RESET_PASSWORD
             ? 'Reset your Nestt password'
             : 'Verify your Nestt email';
-        const link =
-          purpose === ChallengePurpose.VERIFY_EMAIL ||
-          purpose === ChallengePurpose.LINK_EMAIL
-            ? `${this.config.values.APP_BASE_URL}/verify-email?email=${encodeURIComponent(target)}&code=${code}`
+        const page = purpose === ChallengePurpose.VERIFY_EMAIL
+          ? '/verify-email'
+          : purpose === ChallengePurpose.RESET_PASSWORD
+            ? '/reset-password'
             : undefined;
+        const link = page ? `${this.config.values.APP_BASE_URL.replace(/\/+$/, '')}${page}` : undefined;
         await this.mail.sendVerificationEmail(target, subject, code, link);
       }
     } catch (error) {

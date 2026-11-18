@@ -1,110 +1,163 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { useCart } from "@/components/cart/CartProvider";
+import { AccountApiError, accountApi } from "@/lib/account/api";
+import { money } from "@/lib/account/data";
+import { purchaseLimit, type ProductDetail, type ProductDetailVariant } from "@/lib/catalog";
 import { ProductCollectionSection } from "./ProductCollectionSection";
-import { ProductIcon, PlusIcon } from "./ProductDetailsIcons";
-import { ProductInfoDrawer } from "./ProductInfoDrawer";
+import { PlusIcon, ProductIcon } from "./ProductDetailsIcons";
+import type { ProductInfoSection } from "./ProductInfoDrawer";
 import { ProductOptions } from "./ProductOptions";
-import { productDetailsProduct } from "./product-details-data";
-import type { ProductInfoSection } from "./product-details-data";
 
-const informationSections: ProductInfoSection[] = ["Description", "Features", "Specifications"];
+export function ProductPurchasePanel({
+  product, variant, onVariantChange, description, information, onInfo,
+}: {
+  product: ProductDetail;
+  variant?: ProductDetailVariant;
+  onVariantChange: (id: string) => void;
+  description?: string | null;
+  information: ProductInfoSection[];
+  onInfo: (section: ProductInfoSection) => void;
+}) {
+  const { items, addItem } = useCart();
+  const [requestedQuantity, setQuantity] = useState(1);
+  const [cartError, setCartError] = useState("");
+  const [saved, setSaved] = useState<Set<string>>(() => new Set());
+  const [wishError, setWishError] = useState<"signin" | "retry">();
+  const [wishPending, setWishPending] = useState(true);
+  const saving = useRef(false);
+  const rating = Number(product.avgRating);
+  const stock = purchaseLimit(product, variant);
+  const inCart = items.find((item) => "variantId" in item && item.variantId === variant?.id)?.quantity ?? 0;
+  const available = Math.max(0, stock - inCart);
+  const quantity = Math.min(requestedQuantity, Math.max(1, available));
+  const isSaved = !!variant && saved.has(variant.id);
+  const price = Number(variant?.price);
+  const guarantee = product.guaranteeLabel || (product.guaranteeDays ? `${product.guaranteeDays}-day guarantee` : "");
+  const guaranteeUrl = product.guaranteeUrl?.trim();
+  const guaranteeHref = guaranteeUrl && /^(https?:\/\/|\/(?!\/))/i.test(guaranteeUrl) ? guaranteeUrl : undefined;
 
-export function ProductPurchasePanel() {
-  const [quantity, setQuantity] = useState(1);
-  const [isSaved, setIsSaved] = useState(false);
-  const [added, setAdded] = useState(false);
-  const [size, setSize] = useState("10ft Two-Cushion Sofa");
-  const [fabric, setFabric] = useState("Tatum Slate (Boucle)");
-  const [activeInfo, setActiveInfo] = useState<ProductInfoSection | null>(null);
+  useEffect(() => {
+    let active = true;
+    void accountApi.wishlist()
+      .then((items) => { if (active) setSaved(new Set(items.map((item) => item.variantId))); })
+      .catch(() => {})
+      .finally(() => { if (active) setWishPending(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function toggleWishlist() {
+    if (!variant || saving.current || wishPending) return;
+    saving.current = true;
+    setWishPending(true);
+    setWishError(undefined);
+    const { id } = variant;
+    try {
+      if (isSaved) await accountApi.removeWish(id);
+      else await accountApi.saveWish(id);
+      setSaved((current) => {
+        const next = new Set(current);
+        if (isSaved) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    } catch (error) {
+      setWishError(error instanceof AccountApiError && error.status === 401 ? "signin" : "retry");
+    } finally {
+      saving.current = false;
+      setWishPending(false);
+    }
+  }
+
+  function addToCart() {
+    if (!variant || available < quantity) return;
+    try {
+      addItem(variant.id, quantity, stock);
+      setCartError("");
+      setQuantity(1);
+    } catch (error) {
+      setCartError(error instanceof Error ? error.message : "Could not add this item to your cart.");
+    }
+  }
 
   return (
-    <div className="min-w-0 md:pt-3">
-      <nav aria-label="Breadcrumb" className="mb-2 text-[9px] text-[#777]">Home › Living › Sofa</nav>
-      <h1 className="max-w-[340px] text-[23px] font-medium leading-[1.08] tracking-[-0.035em] sm:text-[20px] lg:text-[26px]">{productDetailsProduct.name}</h1>
-      <p className="mt-1 text-[9px] leading-4 text-[#777]">{productDetailsProduct.subtitle}</p>
-      <div className="mt-1 flex items-center gap-1 text-[9px]">
-        <span className="text-[14px] leading-none text-[#f39200]">★</span>
-        <strong className="font-semibold">4.9</strong>
-        <span className="text-[#888]">(92 reviews)</span>
-      </div>
+    <section aria-label="Product details" className="min-w-0 md:pt-3 lg:pt-6">
+      <nav aria-label="Breadcrumb" className="mb-2 flex flex-wrap items-center gap-1.5 text-xs leading-[18px] text-[#777]">
+        <Link href="/" className="hover:underline">Home</Link><span aria-hidden="true">›</span>
+        <Link href="/products" className="hover:underline">Furniture</Link>
+        {product.category && <><span aria-hidden="true">›</span>
+          <Link href={`/products?category=${encodeURIComponent(product.category.slug)}`} className="hover:underline">{product.category.name}</Link>
+        </>}
+      </nav>
+      <h1 className="text-[28px] font-medium leading-[1.2] tracking-[-0.02em] lg:text-[36px] lg:leading-[43px]">{product.name}</h1>
+      {description && <p className="mt-0.5 line-clamp-2 text-xs leading-[18px] text-[#555]">{description}</p>}
+      {rating > 0 && !!product.totalReviews && <div className="mt-1 flex items-center gap-1 text-sm leading-6">
+        <span aria-hidden="true" className="text-[22px] leading-none text-[#f79900]">★</span>
+        <strong className="font-semibold">{rating.toFixed(1)}</strong>
+        <span className="text-[#717171]">({product.totalReviews} reviews)</span>
+      </div>}
 
-      <div className="mt-2">
-        <ProductOptions size={size} fabric={fabric} onSizeChange={setSize} onFabricChange={setFabric} />
-        {informationSections.map((title) => (
-          <button
-            key={title}
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => setActiveInfo(title)}
-            className="flex min-h-[31px] w-full cursor-pointer items-center border-b border-[#e9e9e9] text-left text-[11px] font-semibold text-[#292929] hover:text-[#f15a22]"
-          >
-            <span className="flex-1">{title}</span>
-            <PlusIcon className="size-[14px] text-[#777]" />
+      <div className="mt-5 lg:mt-[22px]">
+        {variant && product.variants?.length && <ProductOptions variants={product.variants} selected={variant} onChange={(id) => {
+          onVariantChange(id);
+          setQuantity(1);
+          setCartError("");
+          setWishError(undefined);
+        }} />}
+        {information.map((section) => (
+          <button key={section} type="button" aria-haspopup="dialog" onClick={() => onInfo(section)}
+            className="flex min-h-12 w-full cursor-pointer items-center justify-between border-b border-[#e5e5ea] text-left text-sm font-semibold hover:text-[#b2421b] lg:min-h-[57px] lg:text-base">
+            {section}<PlusIcon className="size-5 text-[#505050]" />
           </button>
         ))}
       </div>
 
-      <PriceAndQuantity
-        quantity={quantity}
-        onQuantityChange={setQuantity}
-      />
-      <PurchaseActions
-        added={added}
-        isSaved={isSaved}
-        onAddToCart={() => setAdded(true)}
-        onToggleSaved={() => setIsSaved(!isSaved)}
-      />
-      <DeliveryBenefits />
-      <ProductCollectionSection />
-
-      <ProductInfoDrawer
-        activeInfo={activeInfo}
-        size={size}
-        fabric={fabric}
-        onClose={() => setActiveInfo(null)}
-      />
-    </div>
-  );
-}
-
-function PriceAndQuantity({ quantity, onQuantityChange }: { quantity: number; onQuantityChange: (quantity: number) => void }) {
-  return (
-    <div className="mt-2 flex min-h-[37px] items-center border-b border-[#e8e8e8]">
-      <div className="flex flex-1 items-baseline gap-1.5">
-        <strong className="text-[14px] font-bold">{productDetailsProduct.price}</strong>
-        <del className="text-[8px] text-[#999]">{productDetailsProduct.oldPrice}</del>
-        <span className="border border-[#f3b2a0] px-1 py-0.5 text-[7px] font-semibold text-[#ed5121]">SAVE 12%</span>
+      <div className="mt-3 flex min-h-10 flex-wrap items-center justify-between gap-x-2 gap-y-1 lg:mt-4">
+        <strong className="text-xl font-bold leading-tight lg:text-2xl">
+          {product.isPriceOnRequest ? "Price on request" : Number.isFinite(price) ? money(price).replace("৳", "৳ ") : "Price unavailable"}
+        </strong>
+        {variant && !product.isPriceOnRequest && <div className="ml-auto flex items-center gap-2 text-[12px] text-[#303030] lg:text-sm">
+          <span>QTY:</span>
+          <div className="flex h-9 items-center bg-[#f7f7f7] text-[#222] lg:h-10">
+            <button type="button" aria-label="Decrease quantity" disabled={quantity <= 1} onClick={() => setQuantity(quantity - 1)}
+              className="h-full w-9 cursor-pointer text-lg text-[#666] disabled:cursor-default disabled:text-[#939393] lg:w-10">−</button>
+            <span aria-live="polite" className="grid h-full min-w-9 place-items-center border border-[#e5e5ea] bg-white text-sm lg:min-w-10 lg:text-base">{String(quantity).padStart(2, "0")}</span>
+            <button type="button" aria-label="Increase quantity" disabled={quantity >= available} onClick={() => setQuantity(quantity + 1)}
+              className="h-full w-9 cursor-pointer text-lg text-[#666] disabled:cursor-default disabled:text-[#939393] lg:w-10">+</button>
+          </div>
+        </div>}
       </div>
-      <span className="mr-1 text-[8px] text-[#555]">QTY:</span>
-      <div className="flex h-[25px] items-center border border-[#e4e4e4] text-[10px]">
-        <button type="button" aria-label="Decrease quantity" onClick={() => onQuantityChange(Math.max(1, quantity - 1))} className="flex h-full w-6 cursor-pointer items-center justify-center text-[#888] hover:text-black">−</button>
-        <span aria-live="polite" className="flex h-full w-7 items-center justify-center border-x border-[#e4e4e4]">{String(quantity).padStart(2, "0")}</span>
-        <button type="button" aria-label="Increase quantity" onClick={() => onQuantityChange(quantity + 1)} className="flex h-full w-6 cursor-pointer items-center justify-center text-[#888] hover:text-black">+</button>
+
+      <div className="mt-3 flex gap-2 lg:mt-5 lg:gap-3">
+        <button type="button" onClick={addToCart} disabled={!variant || !available || !Number.isFinite(price)}
+          className="h-11 flex-1 cursor-pointer bg-[#f15a22] px-3 text-sm font-semibold text-white hover:bg-[#d74a15] disabled:cursor-not-allowed disabled:bg-[#bcb9b3] lg:h-[52px] lg:text-base">
+          Add to Cart
+        </button>
+        <button type="button" onClick={toggleWishlist} disabled={!variant || wishPending} aria-pressed={isSaved}
+          aria-label={isSaved ? "Remove from wishlist" : "Add to wishlist"}
+          className="flex size-11 shrink-0 cursor-pointer items-center justify-center bg-[#f7f7f7] text-[#595959] hover:text-[#f15a22] aria-pressed:text-[#f15a22] disabled:cursor-default lg:size-[52px]">
+          <ProductIcon kind="heart" className="size-6" />
+        </button>
       </div>
-    </div>
-  );
-}
+      {cartError && <p role="alert" className="mt-2 text-[11px] text-[#a04433]">{cartError}</p>}
+      {wishError && <p role="status" className="mt-2 text-[11px] text-[#a04433]">
+        {wishError === "signin"
+          ? <><Link href="/account/wishlist" className="underline">Sign in</Link> to save to your wishlist.</>
+          : "Could not update your wishlist. Try again."}
+      </p>}
 
-function PurchaseActions({ added, isSaved, onAddToCart, onToggleSaved }: { added: boolean; isSaved: boolean; onAddToCart: () => void; onToggleSaved: () => void }) {
-  return (
-    <div className="mt-2 flex gap-1.5">
-      <button type="button" onClick={onAddToCart} className={`flex h-[36px] flex-1 cursor-pointer items-center justify-center gap-2 text-[10px] font-semibold text-white transition-colors ${added ? "bg-[#415e46]" : "bg-[#f15a22] hover:bg-[#da4d17]"}`}>
-        {added ? "Added to Cart ✓" : "Add to Cart"}
-      </button>
-      <button type="button" onClick={onToggleSaved} aria-label={isSaved ? "Remove from wishlist" : "Add to wishlist"} aria-pressed={isSaved} className={`flex size-[36px] cursor-pointer items-center justify-center border border-[#e5e5e5] ${isSaved ? "text-[#f15a22]" : "text-[#666] hover:text-[#f15a22]"}`}>
-        <ProductIcon kind="heart" />
-      </button>
-    </div>
-  );
-}
-
-function DeliveryBenefits() {
-  return (
-    <div className="mt-2 space-y-1 text-[9px] text-[#555]">
-      <p className="flex items-center gap-1.5"><ProductIcon kind="chair" /><span>Available</span></p>
-      <p className="flex items-center gap-1.5"><ProductIcon kind="truck" /><span>Delivered to <a href="/#showrooms" className="cursor-pointer text-[#f15a22] underline underline-offset-2">Mirpur Dohs, Dhaka</a> · Nov 7–17th</span></p>
-      <p className="flex items-center gap-1.5"><ProductIcon kind="shield" /><span>30 Day <a href="/#returns" className="cursor-pointer text-[#f15a22] underline underline-offset-2">satisfaction guarantee.</a></span></p>
-    </div>
+      <div className="mt-4 space-y-2 text-sm leading-5 text-[#303030] lg:mt-5 lg:space-y-[11px] lg:text-base">
+        {variant && !product.isPriceOnRequest && <p className="flex items-center gap-1.5">
+          <ProductIcon kind="chair" className="size-5 shrink-0" /><span>{available ? "Available" : stock ? "Available quantity already in your cart" : variant.stockStatus === "PREORDER" ? "Preorder" : "Out of stock"}</span>
+        </p>}
+        <p className="flex items-center gap-1.5"><ProductIcon kind="truck" className="size-5 shrink-0" /><span>Delivery options at checkout</span></p>
+        {guarantee && <p className="flex items-center gap-1.5">
+          <ProductIcon kind="shield" className="size-5 shrink-0" />{guaranteeHref ? <a href={guaranteeHref} className="text-[#ba481b] underline underline-offset-2">{guarantee}</a> : <span>{guarantee}</span>}
+        </p>}
+      </div>
+      {!!product.pairSources?.length && <ProductCollectionSection pairs={product.pairSources} />}
+    </section>
   );
 }

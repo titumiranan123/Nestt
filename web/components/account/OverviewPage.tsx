@@ -9,7 +9,6 @@ import {
   dateLabel,
   money,
   orderTotal,
-  products,
   statusLabel,
 } from "@/lib/account/data";
 
@@ -27,7 +26,7 @@ export function OverviewPage() {
         title={`Welcome home, ${state.profile.name.split(" ")[0]}.`}
         description="Your orders, favourites and account, all in one place."
         action={
-          <Link className="account-button" href="/#recommended">
+          <Link className="account-button" href="/products">
             Continue shopping <Icon name="arrow" size={15} />
           </Link>
         }
@@ -77,18 +76,19 @@ export function OverviewPage() {
             <>
               <p className="account-eyebrow">YOUR NEXT DELIVERY</p>
               <div className="delivery-order-heading">
-                <h2>Order #{next.id}</h2>
+                <h2>Order #{next.code}</h2>
                 <Badge tone={next.status.toLowerCase()}>
                   {statusLabel(next.status)}
                 </Badge>
               </div>
-              <div className="delivery-product">
+              {next.items[0] && <div className="delivery-product">
                 <Image
-                  src={next.items[0].image}
+                  src={next.items[0].image ?? "/assets/hero/quality-living-room.webp"}
                   alt={next.items[0].name}
                   width={235}
                   height={160}
                   priority
+                  unoptimized
                 />
                 <div>
                   <h3>{next.items[0].name}</h3>
@@ -99,14 +99,12 @@ export function OverviewPage() {
                   <div className="delivery-estimate">
                     <Icon name="calendar" />
                     <div>
-                      <span>Estimated delivery</span>
-                      <strong>
-                        {next.delivery ?? "We’ll confirm your delivery shortly"}
-                      </strong>
+                      <span>Delivery status</span>
+                      <strong>{statusLabel(next.status)}</strong>
                     </div>
                   </div>
                 </div>
-              </div>
+              </div>}
               <div className="delivery-bottom">
                 <DeliveryTimeline status={next.status} />
                 <Link
@@ -124,7 +122,7 @@ export function OverviewPage() {
               <p>
                 No deliveries on the way. Find the next piece for your space.
               </p>
-              <Link className="account-button primary" href="/#recommended">
+              <Link className="account-button primary" href="/products">
                 Explore furniture
               </Link>
             </div>
@@ -135,21 +133,21 @@ export function OverviewPage() {
           <div className="account-check-row">
             <span
               className={
-                state.profile.isEmailVerified ? "verified-dot" : "neutral-dot"
+                state.profile.isPhoneVerified ? "verified-dot" : "neutral-dot"
               }
             >
               <Icon
-                name={state.profile.isEmailVerified ? "check" : "lock"}
+                name={state.profile.isPhoneVerified ? "check" : "lock"}
                 size={13}
               />
             </span>
             <div>
               <strong>
-                {state.profile.isEmailVerified
-                  ? "Email verified"
-                  : "Email not verified"}
+                {state.profile.isPhoneVerified
+                  ? "Phone verified"
+                  : state.profile.phone ? "Phone not verified" : "No phone linked"}
               </strong>
-              <p>{state.profile.email}</p>
+              <p>{state.profile.phone}</p>
             </div>
           </div>
           <div className="account-check-row">
@@ -177,7 +175,7 @@ export function OverviewPage() {
           View all orders <Icon name="arrow" size={15} />
         </Link>
       </div>
-      <div className="account-table-scroll">
+      {state.orders.length > 0 ? <div className="account-table-scroll">
         <table className="account-table">
           <thead>
             <tr>
@@ -194,9 +192,9 @@ export function OverviewPage() {
           <tbody>
             {state.orders.slice(0, 3).map((order) => (
               <tr key={order.id}>
-                <td>#{order.id}</td>
+                <td>#{order.code}</td>
                 <td>{dateLabel(order.date)}</td>
-                <td>{order.items[0].name}</td>
+                <td>{order.items[0]?.name ?? "—"}</td>
                 <td>{money(orderTotal(order))}</td>
                 <td>
                   <Badge tone={order.status.toLowerCase()}>
@@ -207,7 +205,7 @@ export function OverviewPage() {
                   <Link
                     className="text-link"
                     href={`/account/orders/${order.id}`}
-                    aria-label={`View order ${order.id}`}
+                    aria-label={`View order ${order.code}`}
                   >
                     View order <Icon name="arrow" size={14} />
                   </Link>
@@ -216,7 +214,7 @@ export function OverviewPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </div> : <p className="account-note">Your orders will appear here after checkout.</p>}
       <div className="account-section-heading">
         <h2 className="account-section-title">Saved for your space</h2>
         <Link className="text-link" href="/account/wishlist">
@@ -224,18 +222,13 @@ export function OverviewPage() {
         </Link>
       </div>
       <div className="overview-favourites">
-        {state.wishlist.slice(0, 3).map((id) => {
-          const p = products.find((p) => p.id === id);
-          return (
-            p && (
-              <Link href="/account/wishlist" key={id}>
-                <Image src={p.image} alt={p.name} width={320} height={200} />
-                <h3>{p.name}</h3>
-                <p>{money(p.price)}</p>
-              </Link>
-            )
-          );
-        })}
+        {state.wishlist.slice(0, 3).map((product) => (
+          <Link href="/account/wishlist" key={product.variantId}>
+            <Image src={product.image} alt={product.name} width={320} height={200} unoptimized />
+            <h3>{product.name}</h3>
+            <p>{product.isPriceOnRequest ? "Price on request" : money(product.price)}</p>
+          </Link>
+        ))}
         {!state.wishlist.length && (
           <p className="account-note">
             Your favourites will appear here.{" "}

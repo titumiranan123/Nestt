@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navbar } from "@/components/navigation/Navbar";
 import { arAssets, getArAssetUrl, type ArAsset } from "@/lib/ar-assets";
 import { ArPhoneQr } from "@/components/ar/ArPhoneQr";
 
@@ -274,7 +273,6 @@ export function RoomPlanner({ androidStoreUrl, iosStoreUrl }: { androidStoreUrl?
 
   return (
     <div className="min-h-screen bg-[#f7f5f0] text-[#24231f]">
-      <Navbar variant="product" />
       <main className="mx-auto max-w-[1500px] px-4 pb-10 pt-7 sm:px-7 lg:px-10">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div><Link href="/" className="text-xs text-[#77736c] hover:text-[#f15a22]">Home / Room designer</Link><p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#a2513d]">Nestt Kreativ</p><h1 className="mt-2 font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Design your room</h1><p className="mt-2 text-sm text-[#706c64]">Build a room, arrange furniture, and save a design to share.</p></div>

@@ -19,8 +19,33 @@ export class AuthRepository {
   userByPhone(phone: string) {
     return this.db.user.findUnique({ where: { phone } });
   }
+  async createCheckoutPhoneCustomer(phone: string, name: string) {
+    try {
+      return await this.db.user.create({
+        data: {
+          name,
+          phone,
+          role: RoleEnum.CUSTOMER,
+          isPhoneVerified: true,
+          phoneVerifiedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (!this.isUniqueConflict(error)) throw error;
+      return this.db.user.findUnique({ where: { phone } });
+    }
+  }
+  markPhoneVerified(userId: string) {
+    return this.db.user.update({
+      where: { id: userId },
+      data: { isPhoneVerified: true, phoneVerifiedAt: new Date() },
+    });
+  }
   userById(id: string) {
     return this.db.user.findUnique({ where: { id } });
+  }
+  updateName(id: string, name: string) {
+    return this.db.user.update({ where: { id }, data: { name } });
   }
   async permissionsForUser(userId: string, role: RoleEnum) {
     const now = new Date();
@@ -112,6 +137,77 @@ export class AuthRepository {
       if (!this.isUniqueConflict(error)) throw error;
       return this.db.user.findUnique({ where: { phone } });
     }
+  }
+
+  async createVerifiedPhoneCustomer(
+    phone: string,
+    name: string,
+    codeHash: string,
+    passwordHash: string,
+  ): Promise<User | null> {
+    const challenge = await this.redis.consumeChallenge(
+      ChallengePurpose.CUSTOMER_PHONE_SIGNUP,
+      phone,
+      codeHash,
+    );
+    if (!challenge) return null;
+    try {
+      return await this.db.user.create({
+        data: {
+          name,
+          phone,
+          passwordHash,
+          role: RoleEnum.CUSTOMER,
+          phoneVerifiedAt: new Date(),
+          isPhoneVerified: true,
+        },
+      });
+    } catch (error) {
+      if (!this.isUniqueConflict(error)) throw error;
+      return null;
+    }
+  }
+
+  async verifyCustomerPhoneLogin(userId: string, phone: string, codeHash: string) {
+    const challenge = await this.redis.consumeChallenge(
+      ChallengePurpose.CUSTOMER_PHONE_LOGIN,
+      phone,
+      codeHash,
+      userId,
+    );
+    return challenge ? this.db.user.findFirst({
+      where: { id: userId, phone, phoneVerifiedAt: { not: null }, role: RoleEnum.CUSTOMER, status: 'ACTIVE' },
+    }) : null;
+  }
+
+  async resetCustomerPhonePassword(
+    userId: string,
+    phone: string,
+    codeHash: string,
+    passwordHash: string,
+    authVersion: number,
+  ): Promise<boolean> {
+    const challenge = await this.redis.consumeChallenge(
+      ChallengePurpose.RESET_PHONE_PASSWORD,
+      phone,
+      codeHash,
+      userId,
+    );
+    if (!challenge) return false;
+    const changed = await this.db.user.updateMany({
+      where: {
+        id: userId,
+        phone,
+        phoneVerifiedAt: { not: null },
+        role: RoleEnum.CUSTOMER,
+        status: 'ACTIVE',
+        authVersion,
+      },
+      data: { passwordHash, authVersion: { increment: 1 } },
+    });
+    if (changed.count !== 1) return false;
+    await this.redis.revokeUserSessions(userId);
+    return true;
   }
 
   async linkEmail(

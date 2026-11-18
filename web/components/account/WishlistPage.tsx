@@ -5,17 +5,14 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAccount } from "./AccountProvider";
 import { Badge, EmptyState, Icon, Modal, PageHeading } from "./ui";
-import { money, products } from "@/lib/account/data";
+import { money } from "@/lib/account/data";
 import type { Product } from "@/lib/account/types";
 
 export function WishlistPage() {
-  const { state, toggleWishlist } = useAccount();
+  const { state, busy, removeWish } = useAccount();
   const [sort, setSort] = useState("saved");
   const [selected, setSelected] = useState<Product | null>(null);
-  const items = [...state.wishlist]
-    .reverse()
-    .map((id) => products.find((p) => p.id === id))
-    .filter((p): p is Product => !!p);
+  const items = [...state.wishlist];
   if (sort === "low") items.sort((a, b) => a.price - b.price);
   if (sort === "high") items.sort((a, b) => b.price - a.price);
   if (sort === "name") items.sort((a, b) => a.name.localeCompare(b.name));
@@ -46,18 +43,19 @@ export function WishlistPage() {
       {items.length ? (
         <div className="wishlist-grid">
           {items.map((p) => (
-            <article className="wishlist-card" key={p.id}>
+            <article className="wishlist-card" key={p.variantId}>
               <div className="wishlist-image">
                 <button
                   className="product-photo-button"
                   onClick={() => setSelected(p)}
                   aria-label={`View ${p.name}`}
                 >
-                  <Image src={p.image} alt={p.name} width={400} height={310} />
+                  <Image src={p.image} alt={p.name} width={400} height={310} unoptimized />
                 </button>
                 <button
                   className="wishlist-remove"
-                  onClick={() => toggleWishlist(p.id)}
+                  disabled={busy}
+                  onClick={() => void removeWish(p.variantId)}
                   aria-label={`Remove ${p.name} from wishlist`}
                 >
                   <Icon name="heart" size={20} />
@@ -72,17 +70,12 @@ export function WishlistPage() {
                 <Badge tone={p.stock ? "good" : "neutral"}>
                   {p.stock ? "In stock" : "Out of stock"}
                 </Badge>
-                <strong className="product-price">{money(p.price)}</strong>
+                <strong className="product-price">{p.isPriceOnRequest ? "Price on request" : money(p.price)}</strong>
                 <button
                   className="account-button primary full-width"
-                  disabled={!p.stock}
                   onClick={() => setSelected(p)}
                 >
-                  {!p.stock
-                    ? "Currently unavailable"
-                    : p.options.length > 1
-                      ? "Choose options"
-                      : "Add to bag"}
+                  {p.stock && p.canAddToCart ? "Add to cart" : "View saved item"}
                 </button>
               </div>
             </article>
@@ -94,7 +87,7 @@ export function WishlistPage() {
           title="Make room for your favourites."
           description="Save the pieces you love and come back when you’re ready."
           action={
-            <Link className="account-button primary" href="/#recommended">
+            <Link className="account-button primary" href="/products">
               Browse furniture <Icon name="arrow" size={16} />
             </Link>
           }
@@ -102,14 +95,11 @@ export function WishlistPage() {
       )}
       <div className="wishlist-note">
         <Icon name="heart" size={18} />
-        <p>
-          Good things are worth keeping. Your favourites are saved on this
-          device.
-        </p>
+        <p>Your favourites are saved to your Nestt account.</p>
       </div>
       {selected && (
         <ProductOptionsDialog
-          key={selected.id}
+          key={selected.variantId}
           product={selected}
           onClose={() => setSelected(null)}
         />
@@ -126,7 +116,6 @@ function ProductOptionsDialog({
   onClose: () => void;
 }) {
   const { addToBag } = useAccount();
-  const [option, setOption] = useState(product.options[0]);
   const [quantity, setQuantity] = useState(1);
   return (
     <Modal title="A closer look" onClose={onClose}>
@@ -136,25 +125,20 @@ function ProductOptionsDialog({
         alt={product.name}
         width={430}
         height={260}
+        unoptimized
       />
       <p className="product-category">{product.category}</p>
       <h3 className="product-options-title">{product.name}</h3>
-      <strong className="product-price">{money(product.price)}</strong>
+      <strong className="product-price">{product.isPriceOnRequest ? "Price on request" : money(product.price)}</strong>
+      <p className="product-finish">{product.finish}</p>
+      {product.stock > 0 && product.canAddToCart ? (
       <form
         className="account-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (addToBag(product.id, option, quantity)) onClose();
+          if (addToBag(product.variantId, quantity)) onClose();
         }}
       >
-        <label className="account-field">
-          Finish / Size
-          <select value={option} onChange={(e) => setOption(e.target.value)}>
-            {product.options.map((o) => (
-              <option key={o}>{o}</option>
-            ))}
-          </select>
-        </label>
         <label className="account-field">
           Quantity
           <input
@@ -167,19 +151,21 @@ function ProductOptionsDialog({
           />
         </label>
         <p className="account-note">
-          {product.stock
-            ? `${product.stock} available in the demo catalog. Delivery and assembly are confirmed at checkout.`
-            : "This piece is currently unavailable."}
+          {product.stock} in stock.
         </p>
         <button
           className="account-button primary full-width"
           type="submit"
-          disabled={!product.stock}
         >
           Add to bag ·{" "}
           {money(product.price * (Number.isFinite(quantity) ? quantity : 0))}
         </button>
       </form>
+      ) : <p className="account-note">{
+        product.isPriceOnRequest ? "Contact Nestt to request a price."
+          : product.stock ? "This finish is currently unavailable for online ordering."
+          : "This piece is currently out of stock."
+      }</p>}
     </Modal>
   );
 }

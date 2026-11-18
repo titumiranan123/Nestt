@@ -26,6 +26,12 @@ export class AttributesService {
     return this.repository.listAll();
   }
 
+  async getAdminById(id: string) {
+    const attribute = await this.repository.findAdminById(id);
+    if (!attribute) throw new NotFoundException('Attribute not found');
+    return attribute;
+  }
+
   async create(input: CreateAttribute) {
     try {
       return await this.repository.create(input);

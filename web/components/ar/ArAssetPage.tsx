@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Navbar } from "@/components/navigation/Navbar";
 import { ArModelViewer } from "@/components/ar/ArModelViewer";
 import { ArPhoneQr } from "@/components/ar/ArPhoneQr";
 import type { ArAsset } from "@/lib/ar-assets";
@@ -7,7 +6,6 @@ import type { ArAsset } from "@/lib/ar-assets";
 export function ArAssetPage({ asset, fromProduct = false }: { asset: ArAsset; fromProduct?: boolean }) {
   return (
     <div className="min-h-screen bg-white text-[#24231f]">
-      <Navbar variant="product" />
       <main className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 sm:px-8 lg:px-12">
         <nav aria-label="Breadcrumb" className="mb-7 flex flex-wrap items-center gap-2 text-xs text-[#77736c]">
           <Link href="/" className="hover:text-[#f15a22]">Home</Link><span aria-hidden="true">/</span>

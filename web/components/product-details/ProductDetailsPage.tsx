@@ -38,6 +38,7 @@ export function ProductDetailsPage({ product }: { product: ProductDetail }) {
   if (features.length) information.push("Features");
   if (specification.image || specs.size) information.push("Specifications");
   if (product.careItems?.length) information.push("Care & maintenance");
+  if (typeof product.assemblyRequired === "boolean" || product.assemblyDuration || product.assemblyPdfUrl) information.push("Assembly");
 
   return (
     <main className={`${siteFont.className} mx-auto max-w-[1444px] px-4 pb-8 pt-3 text-[#191919] lg:px-[18px] lg:pt-4`}>
@@ -63,6 +64,7 @@ export function ProductDetailsPage({ product }: { product: ProductDetail }) {
         features={features}
         specification={specification}
         careItems={product.careItems}
+        assembly={product}
         onClose={() => setActiveInfo(null)}
       />
     </main>

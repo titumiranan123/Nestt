@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
   },
   cacheComponents: true,
   partialPrefetching: true,
+  async headers() {
+    return [{
+      source: "/assets/demo-catalog/:product/:variant(standard|alternate).usdz",
+      headers: [{ key: "Content-Type", value: "model/vnd.usdz+zip" }],
+    }];
+  },
   turbopack: {
     rules: {
       "*.css": {

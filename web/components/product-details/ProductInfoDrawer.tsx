@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { catalogImageUrl, type CatalogProduct, type ProductSpecification } from "@/lib/catalog";
+import { catalogImageUrl, type CatalogProduct, type ProductDetail, type ProductSpecification } from "@/lib/catalog";
 
-export type ProductInfoSection = "Description" | "Features" | "Specifications" | "Care & maintenance";
+export type ProductInfoSection = "Description" | "Features" | "Specifications" | "Care & maintenance" | "Assembly";
+
+type ProductAssembly = Pick<ProductDetail, "assemblyRequired" | "assemblyDuration" | "assemblyPdfUrl">;
 
 export function ProductInfoDrawer({
   activeInfo,
@@ -11,6 +13,7 @@ export function ProductInfoDrawer({
   features,
   specification,
   careItems,
+  assembly,
   onClose,
 }: {
   activeInfo: ProductInfoSection | null;
@@ -18,6 +21,7 @@ export function ProductInfoDrawer({
   features: string[];
   specification: ProductSpecification;
   careItems?: CatalogProduct["careItems"];
+  assembly: ProductAssembly;
   onClose: () => void;
 }) {
   const [isClosing, setIsClosing] = useState(false);
@@ -77,6 +81,7 @@ export function ProductInfoDrawer({
             {features.map((feature) => <li key={feature}>{feature}</li>)}
           </ul>}
           {activeInfo === "Specifications" && <ProductSpecifications specification={specification} />}
+          {activeInfo === "Assembly" && <ProductAssemblyDetails assembly={assembly} />}
           {activeInfo === "Care & maintenance" && <ul className="space-y-4">
             {careItems?.map((item) => <li key={item.id}>
               <h3 className="font-semibold text-[#333]">{item.title}</h3>
@@ -86,6 +91,18 @@ export function ProductInfoDrawer({
         </div>
       </aside>
     </dialog>
+  );
+}
+
+function ProductAssemblyDetails({ assembly }: { assembly: ProductAssembly }) {
+  const guide = catalogImageUrl(assembly.assemblyPdfUrl);
+  const duration = assembly.assemblyDuration ?? 0;
+  return (
+    <div className="space-y-3">
+      {typeof assembly.assemblyRequired === "boolean" && <p>{assembly.assemblyRequired ? "Assembly required." : "Arrives assembled."}</p>}
+      {duration > 0 && <p>Estimated setup time {duration} minutes.</p>}
+      {guide && <a href={guide} target="_blank" rel="noreferrer" className="inline-block font-semibold text-[#ba481b] underline underline-offset-2">Open setup guide (PDF)</a>}
+    </div>
   );
 }
 

@@ -17,6 +17,7 @@
     "prisma:seed:product-categories": "node --experimental-strip-types prisma/seed-product-categories.ts",
     "prisma:seed:product-attributes": "node --experimental-strip-types prisma/seed-product-attributes.ts",
     "prisma:seed:products": "node --experimental-strip-types prisma/seed-products.ts",
+    "prisma:seed:product-details": "node --experimental-strip-types prisma/seed-product-details.ts",
     "prisma:seed:bangladesh-locations": "node --experimental-strip-types prisma/seed-bangladesh-locations.ts",
     "prisma:seed:seo": "node --experimental-strip-types prisma/seed-seo.ts",
     "build": "nest build",

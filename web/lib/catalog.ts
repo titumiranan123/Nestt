@@ -52,6 +52,9 @@ export type ProductDetailVariant = ProductVariant & {
 
 export type ProductDetail = Omit<CatalogProduct, "variants"> & {
   variants?: ProductDetailVariant[];
+  assemblyRequired?: boolean;
+  assemblyDuration?: number | null;
+  assemblyPdfUrl?: string | null;
   guaranteeDays?: number | null;
   guaranteeLabel?: string | null;
   guaranteeUrl?: string | null;

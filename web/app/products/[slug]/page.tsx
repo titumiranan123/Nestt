@@ -35,10 +35,12 @@ async function ProductContent({ params }: Pick<PageProps<"/products/[slug]">, "p
   const { slug } = await params;
   const {
     id, name, description, features, careItems, category, brand, specification, isPriceOnRequest,
+    assemblyRequired, assemblyDuration, assemblyPdfUrl,
     avgRating, totalReviews, guaranteeDays, guaranteeLabel, guaranteeUrl, pairSources, variants,
   } = await getProduct(slug);
   const product: ProductDetail = {
     id, name, slug, description, features, careItems, category, brand, specification, isPriceOnRequest,
+    assemblyRequired, assemblyDuration, assemblyPdfUrl,
     avgRating, totalReviews, guaranteeDays, guaranteeLabel, guaranteeUrl, pairSources,
     variants: variants?.map(({
       id, name, price, isDefault, stockQty, stockStatus, media, variantOptions,

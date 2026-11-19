@@ -17,7 +17,7 @@ async function forceSignOut(): Promise<void> {
   await signOutPromise;
 }
 
-export async function apiClient<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+async function requestApi(path: string, options: ApiRequestOptions): Promise<Response> {
   const { authRequired = true, ...init } = options;
   const response = await fetch(`/api/bff${path.startsWith("/") ? path : `/${path}`}`, {
     ...init,
@@ -34,6 +34,16 @@ export async function apiClient<T>(path: string, options: ApiRequestOptions = {}
     try { payload = await response.json(); } catch { payload = null; }
     throw toApiError(payload, response.status);
   }
+  return response;
+}
+
+export async function apiClient<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const response = await requestApi(path, options);
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+export async function apiDownload(path: string): Promise<Blob> {
+  const response = await requestApi(path, { headers: { accept: "text/csv" } });
+  return response.blob();
 }

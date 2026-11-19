@@ -1,11 +1,12 @@
 import AdminIcon from "@/components/admin/AdminIcon";
+import { dashboardPeriods, type DashboardPeriod } from "@/features/dashboard/types";
 
 export function DashboardHeader({
   period,
   onPeriodChange,
 }: {
-  period: string;
-  onPeriodChange: (period: string) => void;
+  period: DashboardPeriod;
+  onPeriodChange: (period: DashboardPeriod) => void;
 }) {
   return (
     <div className="flex flex-col justify-between gap-4 rounded-xl border border-brand/10    p-4 sm:flex-row sm:items-center sm:px-5">
@@ -26,12 +27,10 @@ export function DashboardHeader({
         <select
           className="appearance-none border-0 bg-transparent text-sm font-semibold text-brand outline-none"
           value={period}
-          onChange={(event) => onPeriodChange(event.target.value)}
+          aria-label="Dashboard reporting period"
+          onChange={(event) => onPeriodChange(event.target.value as DashboardPeriod)}
         >
-          <option>Today</option>
-          <option>Last 7 days</option>
-          <option>Last 30 days</option>
-          <option>This year</option>
+          {Object.entries(dashboardPeriods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
         <AdminIcon className="text-accent" name="chev-down" size={14} />
       </label>

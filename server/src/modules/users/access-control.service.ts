@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -46,6 +47,22 @@ export class AccessControlService {
     };
   }
 
+  async listRoleAudit(role: RoleEnum, actorId: string, actorRole: RoleEnum) {
+    await this.assertPermission(actorId, actorRole, 'settings:read');
+    if (role === RoleEnum.CUSTOMER)
+      throw new NotFoundException('Staff role was not found.');
+    return this.db.auditLog.findMany({
+      where: {
+        resource: 'role',
+        resourceId: role,
+        action: AuditAction.PERMISSION_CHANGE,
+      },
+      select: { id: true, actorEmail: true, createdAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 20,
+    });
+  }
+
   async updateRolePermissions(
     role: RoleEnum,
     actorId: string,
@@ -60,58 +77,76 @@ export class AccessControlService {
     await this.assertPermission(actorId, actorRole, 'settings:update');
 
     const uniqueKeys = [...new Set(input.permissions)];
-    return this.db.$transaction(async (tx) => {
-      const [actor, existing] = await Promise.all([
-        tx.user.findUnique({ where: { id: actorId }, select: { email: true } }),
-        tx.rolePermission.findMany({
-          where: { role },
-          select: { permission: { select: { key: true } } },
-        }),
-      ]);
-      if (!actor) throw new NotFoundException('Administrator not found.');
+    return this.db
+      .$transaction(
+        async (tx) => {
+          const [actor, existing] = await Promise.all([
+            tx.user.findUnique({
+              where: { id: actorId },
+              select: { email: true },
+            }),
+            tx.rolePermission.findMany({
+              where: { role },
+              select: { permission: { select: { key: true } } },
+            }),
+          ]);
+          if (!actor) throw new NotFoundException('Administrator not found.');
 
-      const currentKeys = existing.map(({ permission }) => permission.key);
-      const nextKeys = [...new Set([...uniqueKeys, ...systemPermissions])];
-      const permissionRecords = await tx.permission.findMany({
-        where: { key: { in: nextKeys } },
-        select: { id: true, key: true },
-      });
-      if (permissionRecords.length !== nextKeys.length) {
-        const known = new Set(permissionRecords.map(({ key }) => key));
-        throw new BadRequestException({
-          message: 'One or more permissions are unknown.',
-          issues: nextKeys
-            .filter((key) => !known.has(key))
-            .map((key) => ({
-              path: 'permissions',
-              message: `Unknown permission: ${key}`,
-            })),
-        });
-      }
+          const currentKeys = existing.map(({ permission }) => permission.key);
+          const nextKeys = [...new Set([...uniqueKeys, ...systemPermissions])];
+          const permissionRecords = await tx.permission.findMany({
+            where: { key: { in: nextKeys } },
+            select: { id: true, key: true },
+          });
+          if (permissionRecords.length !== nextKeys.length) {
+            const known = new Set(permissionRecords.map(({ key }) => key));
+            throw new BadRequestException({
+              message: 'One or more permissions are unknown.',
+              issues: nextKeys
+                .filter((key) => !known.has(key))
+                .map((key) => ({
+                  path: 'permissions',
+                  message: `Unknown permission: ${key}`,
+                })),
+            });
+          }
 
-      const permissionIds = permissionRecords.map(({ id }) => id);
-      await tx.rolePermission.deleteMany({ where: { role } });
-      await tx.rolePermission.createMany({
-        data: permissionIds.map((permissionId) => ({ role, permissionId })),
-        skipDuplicates: true,
-      });
-      await tx.auditLog.create({
-        data: {
-          actorId,
-          actorEmail: actor.email ?? 'unknown',
-          action: AuditAction.PERMISSION_CHANGE,
-          resource: 'role',
-          resourceId: role,
-          oldData: { permissions: currentKeys } as Prisma.InputJsonValue,
-          newData: { permissions: nextKeys } as Prisma.InputJsonValue,
-          ipAddress,
-          userAgent,
-          status: 'SUCCESS',
+          const permissionIds = permissionRecords.map(({ id }) => id);
+          await tx.rolePermission.deleteMany({ where: { role } });
+          await tx.rolePermission.createMany({
+            data: permissionIds.map((permissionId) => ({ role, permissionId })),
+            skipDuplicates: true,
+          });
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              actorEmail: actor.email ?? 'unknown',
+              action: AuditAction.PERMISSION_CHANGE,
+              resource: 'role',
+              resourceId: role,
+              oldData: { permissions: currentKeys } as Prisma.InputJsonValue,
+              newData: { permissions: nextKeys } as Prisma.InputJsonValue,
+              ipAddress,
+              userAgent,
+              status: 'SUCCESS',
+            },
+          });
+
+          return { role, permissions: uniqueKeys.sort() };
         },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      )
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034'
+        ) {
+          throw new ConflictException(
+            'Role permissions changed while saving. Review the current grants and try again.',
+          );
+        }
+        throw error;
       });
-
-      return { role, permissions: uniqueKeys.sort() };
-    });
   }
 
   private async assertPermission(userId: string, role: RoleEnum, key: string) {

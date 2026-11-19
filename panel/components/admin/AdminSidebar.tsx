@@ -12,10 +12,16 @@ import {
 } from "@/lib/admin-navigation";
 import AdminIcon from "@/components/admin/AdminIcon";
 
-const navItemState = (active: boolean) =>
-  active
+function navItemState(active: boolean, useSecondary = false) {
+  if (useSecondary) {
+    return active
+      ? "border-l-2 border-secondary bg-secondary/10 text-secondary"
+      : "border-l-2 border-transparent text-gray-600 hover:bg-secondary/5 hover:text-secondary";
+  }
+  return active
     ? "border-l-2 border-accent bg-brand-soft text-brand"
     : "border-l-2 border-transparent text-gray-600 hover:bg-gray-50 hover:text-brand";
+}
 
 export default function AdminSidebar({
   open,
@@ -88,7 +94,6 @@ export default function AdminSidebar({
                 "/admin/brands",
                 "/admin/coupons",
                 "/admin/notifications",
-                "/admin/seo",
               ].includes(item.href);
               if (item.href === "/")
                 return (
@@ -124,6 +129,7 @@ export default function AdminSidebar({
               );
             }
             const children = item.children ?? [];
+            const useSecondary = item.featureKey === "seo" || item.featureKey === "report";
             const hasActiveChild = children.some(
               (child) => child.href && pathname.startsWith(child.href),
             );
@@ -132,7 +138,7 @@ export default function AdminSidebar({
               <div className="grid gap-0.5" key={item.title}>
                 <button
                   type="button"
-                  className={`flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${navItemState(hasActiveChild)}`}
+                  className={`flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${navItemState(hasActiveChild, useSecondary)}`}
                   aria-expanded={expanded}
                   onClick={() =>
                     setOpenGroups((current) => ({
@@ -165,7 +171,6 @@ export default function AdminSidebar({
                         "/admin/backups",
                         "/admin/coupons",
                         "/admin/notifications",
-                        "/admin/seo",
                         "/admin/seo/page-seo",
                         "/admin/seo/robots",
                         "/admin/seo/sitemap",
@@ -173,6 +178,11 @@ export default function AdminSidebar({
                         "/admin/settings/shipping",
                         "/admin/location",
                         "/admin/settings/payments",
+                        "/admin/reports/sales-revenue",
+                        "/admin/reports/products-inventory",
+                        "/admin/reports/customers",
+                        "/admin/reports/customers",
+                        "/admin/reports/revenue",
                         "/admin/inventory",
                         "/admin/inventory/adjustments",
                         "/admin/inventory/low-stock",
@@ -183,12 +193,13 @@ export default function AdminSidebar({
                         <Link
                           key={child.href}
                           href={child.href}
+                          aria-current={childActive ? "page" : undefined}
                           aria-disabled={!isReady}
                           onClick={(event) => {
                             if (!isReady) event.preventDefault();
                             onClose();
                           }}
-                          className={`relative flex min-h-9 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition ${navItemState(childActive)} ${!isReady ? "cursor-default" : ""}`}
+                          className={`relative flex min-h-9 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition ${navItemState(childActive, useSecondary)} ${!isReady ? "cursor-default" : ""}`}
                         >
                           {child.icon && (
                             <AdminIcon name={child.icon} size={13} />

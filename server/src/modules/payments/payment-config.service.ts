@@ -25,15 +25,14 @@ export class PaymentConfigService {
   }
 
   async saveSsl(input: SslConfigInput) {
-    const current = await this.repository.getSsl();
     const saved = await this.repository.saveSsl({
-      storeId: this.mergeSecret(input.storeId, current?.storeId, 'storeId'),
-      storePass: this.mergeSecret(
-        input.storePass,
-        current?.storePass,
-        'storePass',
-      ),
-      status: input.status ?? current?.status ?? false,
+      ...(input.storeId !== undefined && {
+        storeId: this.crypto.encrypt(input.storeId),
+      }),
+      ...(input.storePass !== undefined && {
+        storePass: this.crypto.encrypt(input.storePass),
+      }),
+      ...(input.status !== undefined && { status: input.status }),
     });
     return {
       status: saved.status,
@@ -59,17 +58,5 @@ export class PaymentConfigService {
       storeId: this.crypto.decrypt(config.storeId),
       storePass: this.crypto.decrypt(config.storePass),
     };
-  }
-
-  private mergeSecret(
-    incoming: string | undefined,
-    encryptedCurrent: string | undefined,
-    field: string,
-  ): string {
-    if (incoming !== undefined) return this.crypto.encrypt(incoming);
-    if (encryptedCurrent) return encryptedCurrent;
-    throw new ConflictException(
-      `${field} is required to configure this provider`,
-    );
   }
 }

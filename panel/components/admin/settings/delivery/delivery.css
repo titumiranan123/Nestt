@@ -1,0 +1,33 @@
+:is(.delivery-management, .delivery-drawer) {
+  --bg-surface-strong: #fff;
+  --bg-surface-muted: color-mix(in srgb, var(--secondary) 5%, white);
+  --admin-surface-border: #edf0f4;
+  --text-primary: #111;
+  --text-secondary: #5f6066;
+  --border-default: color-mix(in srgb, var(--secondary) 12%, transparent);
+  --border-strong: color-mix(in srgb, var(--secondary) 18%, transparent);
+  --input-bg: rgba(255, 255, 255, 0.96);
+  --input-border: color-mix(in srgb, var(--secondary) 14%, transparent);
+  --input-focus-ring: color-mix(in srgb, var(--secondary) 12%, transparent);
+  --input-placeholder: #94898f;
+}
+
+.admin-shell main:has(> .delivery-management) {
+  background: color-mix(in srgb, var(--secondary) 5%, white);
+}
+
+.delivery-drawer .delivery-input {
+  width: 100%;
+  border: 1px solid var(--input-border);
+  border-radius: 0.5rem;
+  background: var(--input-bg);
+  padding: 0.625rem 0.75rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.delivery-drawer .delivery-input:focus {
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, Box, Layers3, SlidersHorizontal, Tag } from "lucide-react";
 import CatalogFilters from "@/components/admin/catalog/CatalogFilters";
 import CatalogFormDrawer from "@/components/admin/catalog/CatalogFormDrawer";
@@ -12,6 +13,8 @@ import AttributeCatalogManager from "@/components/admin/catalog/AttributeCatalog
 import CategoryCatalogManager from "@/components/admin/catalog/CategoryCatalogManager";
 import { confirmAdminAction, showAdminNotice } from "@/lib/admin-swal";
 import { demoAttributes, demoBrands, demoCategories, demoProducts, type CatalogRecord } from "@/lib/catalog-demo-data";
+import { brandApi, type BrandInput } from "@/lib/api/admin-tools";
+import { getErrorMessage } from "@/lib/api/errors";
 
 type CatalogKind = "products" | "categories" | "attributes" | "brands";
 type CatalogForm = CatalogRecord;
@@ -40,7 +43,10 @@ export default function CatalogManager({ kind }: { kind: CatalogKind }) {
 }
 
 function DemoCatalogManager({ kind }: { kind: Exclude<CatalogKind, "categories"> }) {
-  const [rows, setRows] = useState<CatalogRecord[]>(() => datasets[kind].map((row) => ({ ...row, options: row.options ? [...row.options] : [] })));
+  const queryClient = useQueryClient();
+  const brandQuery = useQuery({ queryKey: ["admin", "brands"], queryFn: ({ signal }) => brandApi.list(signal), enabled: kind === "brands" });
+  const [localRows, setLocalRows] = useState<CatalogRecord[]>(() => datasets[kind].map((row) => ({ ...row, options: row.options ? [...row.options] : [] })));
+  const rows = kind === "brands" ? brandQuery.data ?? [] : localRows;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All status");
   const [category, setCategory] = useState("All categories");
@@ -74,24 +80,43 @@ function DemoCatalogManager({ kind }: { kind: Exclude<CatalogKind, "categories">
   const setField = (key: keyof CatalogRecord, value: string | boolean | number) => setForm((current) => ({ ...current, [key]: value }));
   const openCreate = () => { setEditing(null); setForm(emptyForm()); setOptionText(""); setDrawerOpen(true); };
   const openEdit = (row: CatalogRecord) => { setEditing(row); setForm({ ...row }); setOptionText(row.options?.join(", ") ?? ""); setDrawerOpen(true); };
-  const save = (event: FormEvent<HTMLFormElement>) => {
+  const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (editing && editing.isPublished !== form.isPublished && !await confirmVisibility(editing, form.isPublished)) return;
     const record = { ...form, name: form.name.trim(), slug: form.slug.trim() || makeSlug(form.name), createdAt: editing?.createdAt ?? new Date().toISOString(), options: kind === "attributes" ? optionText.split(",").map((value) => value.trim()).filter(Boolean) : form.options };
-    if (editing) setRows((current) => current.map((row) => row.id === editing.id ? { ...row, ...record, id: row.id } : row));
+    if (kind === "brands") {
+      const input: BrandInput = { name: record.name, slug: record.slug, description: record.description || null, logo: record.logo || null, verified: Boolean(record.verified), isPublished: record.isPublished, metaTitle: record.metaTitle || null, metaDescription: record.metaDescription || null, metaKeywords: record.metaKeywords ?? "" };
+      try {
+        if (editing) await brandApi.update(editing.id, input); else await brandApi.create(input);
+        await queryClient.invalidateQueries({ queryKey: ["admin", "brands"] });
+      } catch (error) { void showAdminNotice("Brand could not be saved", getErrorMessage(error), "error"); return; }
+    } else if (editing) setLocalRows((current) => current.map((row) => row.id === editing.id ? { ...row, ...record, id: row.id } : row));
     else {
       const prefix = kind === "products" ? "PR" : kind === "attributes" ? "ATR" : "BR";
       const next = String(Math.max(0, ...rows.map((row) => Number(row.id.match(/(\d+)$/)?.[1] ?? 0))) + 1).padStart(3, "0");
-      setRows((current) => [{ ...record, id: `${prefix}-${next}` }, ...current]);
+      setLocalRows((current) => [{ ...record, id: `${prefix}-${next}` }, ...current]);
     }
     setDrawerOpen(false);
-    void showAdminNotice(`${meta.singular} ${editing ? "updated" : "created"}`, "The change is saved in temporary demo data for this session.", "success");
+    if (kind !== "brands") void showAdminNotice(`${meta.singular} ${editing ? "updated" : "created"}`, "The change is saved in temporary demo data for this session.", "success");
   };
   const remove = async (row: CatalogRecord) => {
-    if (!await confirmAdminAction(`Delete ${row.name}?`, "This only removes the item from the temporary demo list.")) return;
-    setRows((current) => current.filter((item) => item.id !== row.id));
+    if (!await confirmAdminAction(`Delete ${row.name}?`, kind === "brands" ? "This brand will be removed from the catalog." : "This only removes the item from the temporary demo list.")) return;
+    if (kind === "brands") {
+      try { await brandApi.remove(row.id); await queryClient.invalidateQueries({ queryKey: ["admin", "brands"] }); }
+      catch (error) { void showAdminNotice("Brand could not be deleted", getErrorMessage(error), "error"); return; }
+    } else setLocalRows((current) => current.filter((item) => item.id !== row.id));
     setSelected((current) => current.filter((id) => id !== row.id));
   };
-  const togglePublished = (row: CatalogRecord) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, isPublished: !item.isPublished } : item));
+  const confirmVisibility = (row: CatalogRecord, isPublished: boolean) => confirmAdminAction(`${isPublished ? "Publish" : "Unpublish"} ${row.name}?`, kind === "brands" ? "This updates the brand storefront visibility." : "This changes the publishing status in the current demo session.");
+  const togglePublished = async (row: CatalogRecord) => {
+    const isPublished = !row.isPublished;
+    if (!await confirmVisibility(row, isPublished)) return;
+    if (kind === "brands") {
+      const input: BrandInput = { name: row.name, slug: row.slug, description: row.description || null, logo: row.logo || null, verified: Boolean(row.verified), isPublished, metaTitle: row.metaTitle || null, metaDescription: row.metaDescription || null, metaKeywords: row.metaKeywords ?? "" };
+      try { await brandApi.update(row.id, input); await queryClient.invalidateQueries({ queryKey: ["admin", "brands"] }); }
+      catch (error) { void showAdminNotice("Brand could not be updated", getErrorMessage(error), "error"); }
+    } else setLocalRows((current) => current.map((item) => item.id === row.id ? { ...item, isPublished } : item));
+  };
   const toggleSelected = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const toggleAll = () => setSelected((current) => visible.length && visible.every((row) => current.includes(row.id) ) ? current.filter((id) => !visible.some((row) => row.id === id)) : [...new Set([...current, ...visible.map((row) => row.id)])]);
   const reset = () => { setSearch(""); setStatus("All status"); setCategory("All categories"); setBrand("All brands"); setPage(1); };
@@ -102,6 +127,7 @@ function DemoCatalogManager({ kind }: { kind: Exclude<CatalogKind, "categories">
   };
 
   return <div className="animate-fade-up space-y-5">
+    {kind === "brands" && brandQuery.isError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{getErrorMessage(brandQuery.error)} <button onClick={() => void brandQuery.refetch()} className="ml-2 font-semibold underline">Retry</button></div>}
     <CatalogHeader eyebrow={meta.eyebrow} title={meta.title} description={meta.description} singular={meta.singular} canCreate={kind !== "products"} onCreate={openCreate} onExport={exportRows}/>
     {kind === "products" && <CatalogStatsGrid stats={stats}/>}
     <section className="rounded-2xl border border-brand/10 bg-white p-3 sm:p-4">

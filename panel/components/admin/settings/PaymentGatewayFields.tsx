@@ -5,14 +5,14 @@ import { Eye, EyeOff } from 'lucide-react';
 import { settingsInput, settingsLabel } from './SettingsPanel';
 import type { GatewayId } from './PaymentGatewayTabs';
 
-export type GatewayData = Record<string, string | boolean>;
+export type GatewayData = { store_id: string; store_pass: string };
 
 const sections: Record<
   GatewayId,
   {
     title: string;
     description: string;
-    fields: { key: string; label: string; placeholder?: string; secret?: boolean }[];
+    fields: { key: keyof GatewayData; label: string; placeholder?: string; secret?: boolean }[];
     toggle: string;
     toggleDescription: string;
   }
@@ -34,11 +34,13 @@ export default function PaymentGatewayFields({
   values,
   onChange,
   credentialsConfigured = false,
+  disabled = false,
 }: {
   gateway: GatewayId;
   values: GatewayData;
-  onChange: (key: string, value: string | boolean) => void;
+  onChange: (key: keyof GatewayData, value: string) => void;
   credentialsConfigured?: boolean;
+  disabled?: boolean;
 }) {
   const config = sections[gateway];
   const [visible, setVisible] = useState<Record<string, boolean>>({});
@@ -55,15 +57,21 @@ export default function PaymentGatewayFields({
             <span className={settingsLabel}>{field.label}</span>
             <div className="relative">
               <input
-                value={String(values[field.key] ?? '')}
-                onChange={(event) => onChange(field.key, event.target.value)}
+                value={values[field.key]}
+                disabled={disabled}
+                autoComplete={field.secret ? 'new-password' : 'off'}
+                onChange={(event) => {
+                  if (!event.target.value && field.secret) setVisible({});
+                  onChange(field.key, event.target.value);
+                }}
                 type={field.secret && !visible[field.key] ? 'password' : 'text'}
-                placeholder={field.secret && credentialsConfigured ? 'Leave blank to keep the saved password' : field.placeholder}
+                placeholder={credentialsConfigured ? `Leave blank to keep the saved ${field.secret ? 'password' : 'Store ID'}` : field.placeholder}
                 className={`${settingsInput} ${field.secret ? 'pr-10' : ''}`}
               />
               {field.secret && (
                 <button
                   type="button"
+                  disabled={disabled || !values[field.key]}
                   onClick={() => setVisible((current) => ({ ...current, [field.key]: !current[field.key] }))}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand"
                   aria-label={`Toggle ${field.label} visibility`}

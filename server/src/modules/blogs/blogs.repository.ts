@@ -5,6 +5,7 @@ import {
   paginationOffset,
   paginationResult,
 } from '../../common/utils/pagination.js';
+import { policySettingKeys } from './dto/blog.schemas.js';
 import type {
   BlogListQuery,
   CreateBlog,
@@ -187,16 +188,7 @@ export class BlogsRepository {
   }
   listPolicies() {
     return this.db.storeSetting.findMany({
-      where: {
-        key: {
-          in: [
-            'policy_refund',
-            'policy_privacy',
-            'policy_terms',
-            'policy_shipping',
-          ],
-        },
-      },
+      where: { key: { in: [...policySettingKeys] } },
       orderBy: { key: 'asc' },
     });
   }

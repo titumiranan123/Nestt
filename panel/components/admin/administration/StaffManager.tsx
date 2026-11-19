@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useState, type FormEvent } from "react";
 import { useSession } from "next-auth/react";
-import { confirmAction } from "@/lib/alert";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { can } from "@/lib/rbac/can";
 import type { DemoStaff } from "@/lib/admin-operations-demo";
 import { useCreateStaff, useDeleteStaff, useResetStaffPassword, useStaffList, useUpdateStaff } from "@/features/staff/hooks";
@@ -57,8 +57,9 @@ export function StaffManager() {
     setDraft({ name: item.name, email: item.email, password: "", phone: item.phone, role: item.role, status: item.status, verified: item.verified });
     setMode(nextMode);
   };
-  const save = (event: FormEvent<HTMLFormElement>) => {
+  const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (createMutation.isPending || updateMutation.isPending) return;
     if (mode === "create") {
       const input: CreateStaffInput = {
         name: draft.name,
@@ -71,6 +72,7 @@ export function StaffManager() {
       };
       createMutation.mutate(input, { onSuccess: () => setMode(null) });
     } else if (mode === "edit" && selected && selected.role !== "SUPER_ADMIN") {
+      if (draft.status !== selected.status && !await confirmAdminAction(`${draft.status === "ACTIVE" ? "Activate" : "Suspend"} ${selected.name}?`, "This changes whether the staff member can access their account.")) return;
       updateMutation.mutate({
         id: selected.id,
         input: { name: draft.name, email: draft.email, phone: draft.phone, role: draft.role as CreateStaffInput["role"], status: draft.status, verified: draft.verified },
@@ -78,7 +80,8 @@ export function StaffManager() {
     }
   };
   const remove = async (item: DemoStaff) => {
-    const confirmed = await confirmAction(
+    if (deleteMutation.isPending) return;
+    const confirmed = await confirmAdminAction(
       `Deactivate ${item.name}?`,
       "The account will be disabled and its sessions revoked. Order and audit history will be retained.",
     );

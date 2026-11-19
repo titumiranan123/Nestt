@@ -1,6 +1,7 @@
 export type OrderStatus = "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
 export type PaymentStatus = "UNPAID" | "PENDING" | "PAID" | "FAILED" | "PARTIALLY_REFUNDED" | "REFUNDED";
 export type PaymentActionStatus = "PAID" | "FAILED";
+export type ReturnActionStatus = "APPROVED" | "REJECTED" | "RECEIVED";
 export type OrderSource = "ONLINE" | "PHONE" | "POS";
 export type OrderRemark = {
   id: string;

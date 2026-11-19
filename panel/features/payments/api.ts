@@ -7,11 +7,11 @@ export type PaymentSettings = {
 export type SaveSslSettings = {
   storeId?: string;
   storePass?: string;
-  status: boolean;
+  status?: boolean;
 };
 
 export const paymentConfigApi = {
-  get: () => apiClient<PaymentSettings>("/admin/payment-config"),
+  get: (signal?: AbortSignal) => apiClient<PaymentSettings>("/admin/payment-config", { signal }),
   saveSsl: (settings: SaveSslSettings) => apiClient<NonNullable<PaymentSettings["ssl"]>>(
     "/admin/payment-config/ssl",
     {

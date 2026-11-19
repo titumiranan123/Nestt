@@ -22,7 +22,7 @@ export function InventoryFilters({ search, status, onSearch, onStatus, onReset }
         <option value="IN_STOCK">In stock</option>
         <option value="LOW_STOCK">Low stock</option>
         <option value="OUT_OF_STOCK">Out of stock</option>
-        <option value="BACKORDER">Backorder</option>
+        <option value="PREORDER">Backorder</option>
       </select>
       </label>
       <button type="button" onClick={onReset} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-accent/20 bg-orange-50/60 px-4 text-sm font-semibold text-accent transition hover:bg-orange-50">

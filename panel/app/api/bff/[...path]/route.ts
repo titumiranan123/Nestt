@@ -49,12 +49,12 @@ async function attachRotatedCookie(response: Response, encoded: string | null, r
   return nextResponse;
 }
 
-function limitedBody(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+function limitedBody(body: ReadableStream<Uint8Array>, limit: number): ReadableStream<Uint8Array> {
   let total = 0;
   return body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
       total += chunk.byteLength;
-      if (total > bodyLimit) throw new RangeError("Request body too large");
+      if (total > limit) throw new RangeError("Request body too large");
       controller.enqueue(chunk);
     },
   }));
@@ -109,7 +109,8 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
     if (!origin || origin !== expectedOrigin) return jsonError(403, "Request origin is not allowed.", "Forbidden");
   }
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > bodyLimit) return jsonError(413, "Request body is too large.", "PayloadTooLarge");
+  const requestBodyLimit = route.bodyLimit ?? bodyLimit;
+  if (Number.isFinite(contentLength) && contentLength > requestBodyLimit) return jsonError(413, "Request body is too large.", "PayloadTooLarge");
 
   const oldRefreshToken = typeof token?.refreshToken === "string" ? token.refreshToken : undefined;
   if (token) token = await rotateAuthToken(token);
@@ -127,21 +128,23 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  const range = route.range && request.headers.get("range");
+  if (range) headers.set("range", range);
   if (typeof token?.accessToken === "string") headers.set("authorization", `Bearer ${token.accessToken}`);
   headers.set("x-request-id", requestId);
 
   try {
-    const body = request.body && !["GET", "HEAD"].includes(method) ? limitedBody(request.body) : undefined;
+    const body = request.body && !["GET", "HEAD"].includes(method) ? limitedBody(request.body, requestBodyLimit) : undefined;
     const upstream = await fetch(backendUrl, {
       method,
       headers,
       body,
       cache: "no-store",
       redirect: "manual",
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(route.timeoutMs ?? timeoutMs),
       ...(body ? { duplex: "half" as const } : {}),
     } as RequestInit & { duplex?: "half" });
-    if (!upstream.ok) return attachRotatedCookie(await backendError(upstream), rotatedCookie, request);
+    if (!upstream.ok && !(route.range && upstream.status === 416)) return attachRotatedCookie(await backendError(upstream), rotatedCookie, request);
 
     const responseHeaders = new Headers();
     upstream.headers.forEach((value, name) => {
@@ -152,7 +155,7 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
     const response = new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders });
     return attachRotatedCookie(response, rotatedCookie, request);
   } catch (error) {
-    if (error instanceof RangeError) return attachRotatedCookie(jsonError(413, "Request body is too large.", "PayloadTooLarge"), rotatedCookie, request);
+    if (error instanceof RangeError || error instanceof Error && error.cause instanceof RangeError) return attachRotatedCookie(jsonError(413, "Request body is too large.", "PayloadTooLarge"), rotatedCookie, request);
     if (error instanceof DOMException && error.name === "TimeoutError") return attachRotatedCookie(jsonError(504, "The API request timed out.", "GatewayTimeout"), rotatedCookie, request);
     return attachRotatedCookie(jsonError(502, "The API is temporarily unavailable.", "BadGateway"), rotatedCookie, request);
   }

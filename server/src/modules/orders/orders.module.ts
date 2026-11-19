@@ -14,13 +14,16 @@ import { OrderStatusEmailService } from './order-status-email.service.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { SslCheckoutService } from './ssl-checkout.service.js';
 import { SslCheckoutController } from './ssl-checkout.controller.js';
+import { DeliveryAdminController } from './delivery-admin.controller.js';
+import { DeliveryLocationService } from './delivery-location.service.js';
+import { GeneralSettingsController, GeneralSettingsService } from './general-settings.controller.js';
 
 @Module({
   imports: [AuthModule, MailModule, PaymentsModule],
-  controllers: [OrdersController, PublicCheckoutController, OrdersAdminController, SslCheckoutController],
+  controllers: [OrdersController, PublicCheckoutController, OrdersAdminController, SslCheckoutController, DeliveryAdminController, GeneralSettingsController],
   providers: [
     OrdersRepository, OrdersService, CheckoutPhoneService, SslCheckoutService,
-    OrderStatusEmailService, RolesGuard, PermissionsGuard, Reflector,
+    OrderStatusEmailService, RolesGuard, PermissionsGuard, Reflector, DeliveryLocationService, GeneralSettingsService,
   ],
 })
 export class OrdersModule {}

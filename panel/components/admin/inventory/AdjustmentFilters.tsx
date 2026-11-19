@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, SlidersHorizontal } from "lucide-react";
-import type { AdjustmentType } from "@/lib/inventory-media-demo";
+import { adjustmentLabels } from "@/features/inventory/types";
 
 export function AdjustmentFilters({ query, type, onQuery, onType }: {
   query: string;
@@ -28,8 +28,8 @@ export function AdjustmentFilters({ query, type, onQuery, onType }: {
           className="w-full border-0 bg-transparent text-sm text-gray-700 outline-none"
         >
           <option value="ALL">All movement types</option>
-          {(["PURCHASE", "SALE", "RETURN", "CORRECTION", "DAMAGE", "TRANSFER"] as AdjustmentType[]).map((entry) => (
-            <option key={entry} value={entry}>{entry.charAt(0) + entry.slice(1).toLowerCase()}</option>
+          {Object.entries(adjustmentLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
           ))}
         </select>
       </label>

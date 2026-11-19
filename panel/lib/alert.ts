@@ -2,7 +2,7 @@ export async function toastSuccess(message: string): Promise<void> {
   const Swal = (await import("sweetalert2")).default;
   await Swal.mixin({ toast: true, position: "top-end", showConfirmButton: false, timer: 2800, timerProgressBar: true }).fire({
     icon: "success",
-    title: message,
+    titleText: message,
   });
 }
 
@@ -10,7 +10,7 @@ export async function toastError(message: string): Promise<void> {
   const Swal = (await import("sweetalert2")).default;
   await Swal.mixin({ toast: true, position: "top-end", showConfirmButton: false, timer: 3800, timerProgressBar: true }).fire({
     icon: "error",
-    title: message,
+    titleText: message,
   });
 }
 

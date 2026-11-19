@@ -8,10 +8,10 @@ import { CatalogHeader } from "@/components/admin/catalog/CatalogHeader";
 import CatalogPagination from "@/components/admin/catalog/CatalogPagination";
 import CatalogTable from "@/components/admin/catalog/CatalogTable";
 import type { CatalogRecord } from "@/lib/catalog-demo-data";
-import { confirmAdminAction, showAdminNotice } from "@/lib/admin-swal";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { getErrorMessage } from "@/lib/api/errors";
 import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
-import { categoriesApi } from "@/features/categories/api";
+import { categoryQueries, useCategoryActions } from "@/features/categories/hooks";
 import type { Category, CategoryInput } from "@/features/categories/types";
 
 const emptyForm = (): CatalogRecord => ({
@@ -51,7 +51,7 @@ function categoryToRecord(category: Category): CatalogRecord {
   };
 }
 
-function recordToInput(form: CatalogRecord): CategoryInput {
+function recordToInput(form: CatalogRecord): CategoryInput & { isPublished: boolean } {
   return {
     name: form.name.trim(),
     slug: form.slug.trim() || makeSlug(form.name),
@@ -69,7 +69,8 @@ function recordToInput(form: CatalogRecord): CategoryInput {
 
 export default function CategoryCatalogManager() {
   const queryClient = useQueryClient();
-  const categoriesQuery = useQuery({ queryKey: ["admin", "categories"], queryFn: categoriesApi.list });
+  const categoriesQuery = useQuery(categoryQueries.list);
+  const actions = useCategoryActions();
   const rows = useMemo(() => (categoriesQuery.data ?? []).map(categoryToRecord), [categoriesQuery.data]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All status");
@@ -79,10 +80,10 @@ export default function CategoryCatalogManager() {
   const [editing, setEditing] = useState<CatalogRecord | null>(null);
   const [form, setForm] = useState<CatalogRecord>(emptyForm);
   const [optionText, setOptionText] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [actionError, setActionError] = useState("");
+  const busy = actions.save.isPending || actions.remove.isPending || actions.publish.isPending;
   const pageSize = 10;
 
   const filtered = useMemo(() => rows.filter((row) => {
@@ -109,58 +110,44 @@ export default function CategoryCatalogManager() {
     setIsLoadingEdit(true);
     setActionError("");
     try {
-      const category = await categoriesApi.get(row.id);
-      setEditing(row);
-      setForm(categoryToRecord(category));
+      const category = categoryToRecord(await queryClient.fetchQuery(categoryQueries.detail(row.id)));
+      setEditing(category);
+      setForm(category);
       resetForm();
       setDrawerOpen(true);
     } catch (error) {
       setActionError(getErrorMessage(error, "Could not load this category."));
-      await showAdminNotice("Category could not be loaded", getErrorMessage(error), "error");
     } finally {
       setIsLoadingEdit(false);
     }
   };
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIsSaving(true);
+    if (busy) return;
     setSubmitError("");
+    const input = recordToInput(form);
+    if (editing && input.isPublished !== editing.isPublished && !await confirmVisibility(editing.name, input.isPublished)) return;
     try {
-      const input = recordToInput(form);
-      const saved = editing ? await categoriesApi.update(editing.id, input) : await categoriesApi.create(input);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "categories"] });
+      const saved = await actions.save.mutateAsync({ id: editing?.id, input });
       setDrawerOpen(false);
       setSelected((current) => current.filter((id) => id !== saved.id));
-      await showAdminNotice(`Category ${editing ? "updated" : "created"}`, `${saved.name} has been saved.`, "success");
     } catch (error) {
       const message = getErrorMessage(error, "The category could not be saved.");
       setSubmitError(message);
-    } finally {
-      setIsSaving(false);
     }
   };
   const remove = async (row: CatalogRecord) => {
+    if (busy) return;
     if (!await confirmAdminAction(`Delete ${row.name}?`, "This category will be removed from the active catalog.")) return;
-    try {
-      await categoriesApi.remove(row.id);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "categories"] });
-      setSelected((current) => current.filter((id) => id !== row.id));
-      await showAdminNotice("Category deleted", `${row.name} has been removed.`, "success");
-    } catch (error) {
-      const message = getErrorMessage(error, "The category could not be deleted.");
-      setActionError(message);
-      await showAdminNotice("Category could not be deleted", message, "error");
-    }
+    setActionError("");
+    actions.remove.mutate(row.id, {
+      onSuccess: () => setSelected((current) => current.filter((id) => id !== row.id)),
+    });
   };
   const togglePublished = async (row: CatalogRecord) => {
-    try {
-      await categoriesApi.update(row.id, { isPublished: !row.isPublished });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "categories"] });
-    } catch (error) {
-      const message = getErrorMessage(error, "Category visibility could not be updated.");
-      setActionError(message);
-      await showAdminNotice("Category could not be updated", message, "error");
-    }
+    if (busy || !await confirmVisibility(row.name, !row.isPublished)) return;
+    setActionError("");
+    actions.publish.mutate({ id: row.id, isPublished: !row.isPublished });
   };
   const toggleSelected = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const toggleAll = () => setSelected((current) => visible.length && visible.every((row) => current.includes(row.id)) ? current.filter((id) => !visible.some((row) => row.id === id)) : [...new Set([...current, ...visible.map((row) => row.id)])]);
@@ -172,7 +159,7 @@ export default function CategoryCatalogManager() {
   };
 
   if (categoriesQuery.isPending) return <AdminLoadingSkeleton kind="catalog" label="Loading categories" />;
-  if (categoriesQuery.isError) return <section className="rounded-2xl border border-red-100 bg-white p-8 text-center"><h2 className="font-semibold text-gray-800">Could not load categories</h2><p className="mt-1 text-sm text-red-700">{getErrorMessage(categoriesQuery.error)}</p><button type="button" onClick={() => void categoriesQuery.refetch()} className="mt-4 rounded-lg border border-brand/20 px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-soft">Try again</button></section>;
+  if (categoriesQuery.isError && !categoriesQuery.data) return <section className="rounded-2xl border border-red-100 bg-white p-8 text-center"><h2 className="font-semibold text-gray-800">Could not load categories</h2><p className="mt-1 text-sm text-red-700">{getErrorMessage(categoriesQuery.error)}</p><button type="button" onClick={() => void categoriesQuery.refetch()} className="mt-4 rounded-lg border border-brand/20 px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-soft">Try again</button></section>;
 
   return <div className="animate-fade-up space-y-5">
     <CatalogHeader eyebrow="Category" title="Category List" description="Organize storefront navigation, publish status, and category media from the live catalog." singular="Category" canCreate onCreate={openCreate} onExport={exportRows}/>
@@ -185,6 +172,12 @@ export default function CategoryCatalogManager() {
       <CatalogTable kind="categories" rows={visible} selected={selected} onToggleSelected={toggleSelected} onToggleAll={toggleAll} onTogglePublished={(row) => void togglePublished(row)} onEdit={(row) => void openEdit(row)} onDelete={(row) => void remove(row)}/>
       <CatalogPagination total={filtered.length} page={page} pageSize={pageSize} pageCount={pageCount} onPageChange={setPage}/>
     </section>
-    <CatalogFormDrawer kind="categories" singular="Category" open={drawerOpen} editing={editing} rows={rows} form={form} optionText={optionText} onOptionText={setOptionText} onChange={setField} onClose={() => setDrawerOpen(false)} onSubmit={save} isSaving={isSaving} submitError={submitError}/>
+    <CatalogFormDrawer kind="categories" singular="Category" open={drawerOpen} editing={editing} rows={rows} form={form} optionText={optionText} onOptionText={setOptionText} onChange={setField} onClose={() => setDrawerOpen(false)} onSubmit={save} isSaving={actions.save.isPending} submitError={submitError}/>
   </div>;
+}
+
+function confirmVisibility(name: string, isPublished: boolean) {
+  return confirmAdminAction(`${isPublished ? "Publish" : "Unpublish"} ${name}?`, isPublished
+    ? "This category will be published in the storefront catalog."
+    : "This category will be hidden from the storefront catalog.");
 }

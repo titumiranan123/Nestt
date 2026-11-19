@@ -22,6 +22,9 @@ model User {
   phoneVerifiedAt      DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
+  customerLocation     String?              @db.VarChar(255)
+  customerDeletedAt    DateTime?
+  customerAvatar       CustomerAvatar?
   addresses            Address[]
   orders               Order[]
   orderRemarks         OrderRemark[]
@@ -49,6 +52,49 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   BANNED
+}
+
+model CustomerAvatar {
+  userId   String @id @db.Uuid
+  mimeType String @db.VarChar(32)
+  bytes    Bytes
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("customer_avatars")
+}
+
+enum MediaUploadKind {
+  IMAGE
+  VIDEO
+}
+
+model MediaUpload {
+  id          String          @id @db.Uuid
+  ownerId     String          @db.Uuid
+  kind        MediaUploadKind
+  name        String          @db.VarChar(255)
+  mimeType    String          @db.VarChar(32)
+  size        Int
+  batchId     String?         @db.Uuid
+  position    Int?
+  isPrimary   Boolean         @default(false)
+  completedAt DateTime?
+  updatedAt   DateTime        @updatedAt
+  chunks      MediaUploadChunk[]
+
+  @@unique([ownerId, batchId, position])
+  @@index([ownerId, completedAt, updatedAt])
+  @@map("media_uploads")
+}
+
+model MediaUploadChunk {
+  uploadId String      @db.Uuid
+  index    Int
+  bytes    Bytes
+  upload   MediaUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@id([uploadId, index])
+  @@map("media_upload_chunks")
 }
 
 enum AuditAction {
@@ -328,6 +374,7 @@ enum AdjustmentType {
   DAMAGE
   RETURN
   SALE
+  TRANSFER
 }
 
 enum PriceRequestStatus {
@@ -1006,6 +1053,11 @@ enum OrderSource {
   POS
 }
 
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
 enum PaymentMethod {
   CASH_ON_DELIVERY
   SSL_COMMERZ
@@ -1188,6 +1240,7 @@ model Order {
   user                  User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
   payment               Payment?
   refunds               Refund[]
+  checkoutKey           OrderCheckoutKey?
 
   @@index([userId])
   @@index([guestPhone])
@@ -1201,6 +1254,24 @@ model Order {
   @@index([guestSessionId])
   @@index([shippingThanaId])
   @@map("orders")
+}
+
+model OrderCheckoutKey {
+  key     String @id @db.VarChar(30)
+  orderId String @unique @map("order_id") @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_checkout_keys")
+}
+
+model OrderNumberSetting {
+  id          Int    @id
+  prefix      String @db.VarChar(10)
+  suffix      String @db.VarChar(10)
+  startNumber Int    @map("start_number")
+  nextNumber  BigInt @map("next_number")
+
+  @@map("order_number_settings")
 }
 
 model OrderItem {
@@ -1372,4 +1443,23 @@ model Refund {
   @@index([paymentId])
   @@index([status])
   @@map("refunds")
+}
+
+model Coupon {
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique @db.VarChar(64)
+  discountType  CouponDiscountType @default(PERCENTAGE) @map("discount_type")
+  discountValue Decimal            @map("discount_value") @db.Decimal(10, 2)
+  minOrder      Decimal?           @map("min_order") @db.Decimal(12, 2)
+  maxDiscount   Decimal?           @map("max_discount") @db.Decimal(12, 2)
+  expiresAt     DateTime?          @map("expires_at") @db.Timestamp(6)
+  usageLimit    Int?               @map("usage_limit")
+  userLimit     Int?               @map("user_limit")
+  usedCount     Int                @default(0) @map("used_count")
+  isActive      Boolean            @default(true) @map("is_active")
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([isActive, expiresAt])
+  @@map("coupons")
 }

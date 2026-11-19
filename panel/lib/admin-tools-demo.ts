@@ -1,17 +1,3 @@
-export type DemoCoupon = {
-  id: string;
-  code: string;
-  discountType: "PERCENTAGE" | "FIXED";
-  discountValue: number;
-  minOrder: number | null;
-  maxDiscount: number | null;
-  expiresAt: string | null;
-  usageLimit: number | null;
-  userLimit: number | null;
-  usedCount: number;
-  isActive: boolean;
-};
-
 export type DemoNotification = {
   id: string;
   type: "ORDER" | "PAYMENT" | "STOCK" | "REVIEW" | "CUSTOMER";
@@ -21,15 +7,6 @@ export type DemoNotification = {
   isRead: boolean;
   target?: string;
 };
-
-export const demoCoupons: DemoCoupon[] = [
-  { id: "CP-1008", code: "NESTT10", discountType: "PERCENTAGE", discountValue: 10, minOrder: 5000, maxDiscount: 1500, expiresAt: "2026-12-31T23:59:00", usageLimit: 300, userLimit: 1, usedCount: 128, isActive: true },
-  { id: "CP-1007", code: "WELCOME500", discountType: "FIXED", discountValue: 500, minOrder: 5000, maxDiscount: null, expiresAt: null, usageLimit: 500, userLimit: 1, usedCount: 391, isActive: true },
-  { id: "CP-1006", code: "ROOM15", discountType: "PERCENTAGE", discountValue: 15, minOrder: 15000, maxDiscount: 2500, expiresAt: "2026-11-30T23:59:00", usageLimit: 100, userLimit: 2, usedCount: 45, isActive: true },
-  { id: "CP-1005", code: "SUMMER700", discountType: "FIXED", discountValue: 700, minOrder: null, maxDiscount: null, expiresAt: "2026-08-31T23:59:00", usageLimit: 200, userLimit: 1, usedCount: 200, isActive: true },
-  { id: "CP-1004", code: "STUDIO20", discountType: "PERCENTAGE", discountValue: 20, minOrder: 10000, maxDiscount: 3000, expiresAt: null, usageLimit: 80, userLimit: 1, usedCount: 12, isActive: false },
-  { id: "CP-1003", code: "FREESHIP", discountType: "FIXED", discountValue: 500, minOrder: 8000, maxDiscount: null, expiresAt: "2026-12-15T23:59:00", usageLimit: null, userLimit: null, usedCount: 64, isActive: true },
-];
 
 export const demoNotifications: DemoNotification[] = [
   { id: "NT-01", type: "ORDER", title: "New order received", body: "Order ORD-2026-1084 was placed by Maliha Rahman for ৳34,800.", createdAt: "2026-10-28T10:42:00", isRead: false, target: "/admin/orders" },

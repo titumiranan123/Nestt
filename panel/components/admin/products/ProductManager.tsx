@@ -2,32 +2,25 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Box, CheckCircle2, CirclePlus, Edit3, PackageSearch, Search, Trash2 } from "lucide-react";
-import { productsApi } from "@/features/products/api";
+import { productQueries, useProductActions } from "@/features/products/hooks";
 import type { Product } from "@/features/products/types";
 import { usePermission } from "@/hooks/use-permission";
 import { getErrorMessage } from "@/lib/api/errors";
-import { confirmAdminAction, showAdminNotice } from "@/lib/admin-swal";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
 
 const money = (value?: string | number | null) => value == null || value === "" ? "—" : new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", maximumFractionDigits: 0 }).format(Number(value));
 
 export default function ProductManager() {
-  const queryClient = useQueryClient();
   const canCreate = usePermission("products:create");
   const canUpdate = usePermission("products:update");
   const canDelete = usePermission("products:delete");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const products = useQuery({ queryKey: ["admin", "products"], queryFn: productsApi.list });
-  const remove = useMutation({
-    mutationFn: productsApi.remove,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
-      await showAdminNotice("Product deleted", "The product was removed from the catalog.", "success");
-    },
-  });
+  const products = useQuery(productQueries.list);
+  const { remove } = useProductActions();
   const rows = useMemo(() => (products.data ?? []).filter((product) => {
     const query = search.trim().toLowerCase();
     const matchesText = !query || [product.name, product.slug, product.category?.name, product.brand?.name, ...product.variants.map((variant) => variant.sku)].some((value) => value?.toLowerCase().includes(query));

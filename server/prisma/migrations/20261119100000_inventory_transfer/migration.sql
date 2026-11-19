@@ -1,0 +1,1 @@
+ALTER TYPE "AdjustmentType" ADD VALUE 'TRANSFER';

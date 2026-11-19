@@ -6,16 +6,24 @@ function escapeXml(value: string): string {
 
 export function buildSitemapXml(records: readonly SeoMetadata[]): string {
   const candidates = records.flatMap((record) => {
-    if (!record.canonicalUrl || record.metaRobots?.toLowerCase().includes("noindex")) return [];
+    if (!record.canonicalUrl) return [];
     try {
       const url = new URL(record.canonicalUrl);
-      return [{ record, url }];
+      if (url.protocol !== "https:" && url.protocol !== "http:") return [];
+      url.hash = "";
+      return [{ record, url, indexable: !/\bnoindex\b/i.test(record.metaRobots ?? "") }];
     } catch {
       return [];
     }
   });
-  const origin = candidates[0]?.url.origin;
-  const pages = candidates.filter(({ url }) => url.origin === origin);
+  const origin = (candidates.find(({ record }) => record.pageName === "home") ?? candidates.find(({ indexable }) => indexable))?.url.origin;
+  const seen = new Set<string>();
+  const pages = candidates.filter(({ url, indexable }) => {
+    if (url.origin !== origin || !indexable || seen.has(url.href)) return false;
+    seen.add(url.href);
+    return true;
+  });
+  if (!pages.length) return "";
   const entries = pages.map(({ record, url }) => {
     const date = record.updatedAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
     const home = record.pageName === "home";

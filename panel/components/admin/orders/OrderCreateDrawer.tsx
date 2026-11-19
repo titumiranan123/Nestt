@@ -1,23 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Minus, Plus, Search, ShoppingBag, Trash2 } from "lucide-react";
 import AdminDrawer from "@/components/admin/AdminDrawer";
-import { productsApi } from "@/features/products/api";
+import { productQueries } from "@/features/products/hooks";
 import type { Product, ProductVariant } from "@/features/products/types";
-import { ordersApi } from "@/features/orders/api";
+import { useCreateOrder } from "@/features/orders/hooks";
+import { deliveryQueries } from "@/features/delivery/hooks";
 import type { OrderRecord } from "@/features/orders/types";
 import { getErrorMessage } from "@/lib/api/errors";
+import { confirmAdminAction } from "@/lib/admin-swal";
 
 const money = (value: number) => new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", maximumFractionDigits: 0 }).format(value);
 const field = "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-brand focus:ring-4 focus:ring-brand/10";
 const label = "mb-1.5 block text-xs font-semibold text-gray-700";
 
 export function OrderCreateDrawer({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (order: OrderRecord) => void }) {
-  const products = useQuery({ queryKey: ["admin", "products", "pos"], queryFn: productsApi.list, enabled: open });
-  const areas = useQuery({ queryKey: ["admin", "orders", "delivery-areas"], queryFn: ordersApi.deliveryAreas, enabled: open });
-  const create = useMutation({ mutationFn: ordersApi.create });
+  const products = useQuery({ ...productQueries.list, enabled: open });
+  const areas = useQuery({ ...deliveryQueries.areas, enabled: open });
+  const create = useCreateOrder();
   const [search, setSearch] = useState("");
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -55,6 +57,10 @@ export function OrderCreateDrawer({ open, onClose, onCreated }: { open: boolean;
     else next[variantId] = quantity;
     return next;
   });
+  const removeItem = async (variant: ProductVariant) => {
+    if (!await confirmAdminAction(`Remove ${variant.name}?`, "This item will be removed from the draft order.")) return;
+    setQuantity(variant.id, 0);
+  };
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!cartItems.length || (fulfillmentType === "DELIVERY" && !selectedArea) || discountAmount > subtotal) return;
@@ -99,7 +105,7 @@ export function OrderCreateDrawer({ open, onClose, onCreated }: { open: boolean;
 
         <div className="min-h-0 overflow-y-auto p-4 sm:p-5">
           <section aria-label="Order cart"><div className="flex items-center gap-2 text-sm font-bold text-gray-900"><ShoppingBag size={17} className="text-brand"/>Cart <span className="text-xs font-medium text-gray-400">({cartItems.reduce((sum, item) => sum + item.quantity, 0)} items)</span></div>
-            <div className="mt-3 space-y-2">{cartItems.length ? cartItems.map(({ product, variant, quantity }) => <div key={variant.id} className="flex items-center gap-3 rounded-lg border border-gray-100 p-3"><div className="min-w-0 flex-1"><strong className="block truncate text-xs font-semibold text-gray-800">{product.name}</strong><small className="text-[10px] text-gray-500">{variant.name} · {money(Number(variant.price))}</small></div><div className="flex items-center gap-1"><button type="button" aria-label={`Decrease ${product.name}`} onClick={() => setQuantity(variant.id, quantity - 1)} className="grid size-7 place-items-center rounded border border-gray-200"><Minus size={12}/></button><span className="w-6 text-center text-xs font-bold">{quantity}</span><button type="button" aria-label={`Increase ${product.name}`} onClick={() => setQuantity(variant.id, Math.min(variant.stockQty, quantity + 1))} disabled={quantity >= variant.stockQty} className="grid size-7 place-items-center rounded border border-gray-200 disabled:opacity-40"><Plus size={12}/></button><button type="button" aria-label={`Remove ${product.name}`} onClick={() => setQuantity(variant.id, 0)} className="ml-1 grid size-7 place-items-center rounded text-red-600 hover:bg-red-50"><Trash2 size={13}/></button></div><strong className="w-20 text-right text-xs">{money(Number(variant.price) * quantity)}</strong></div>) : <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-xs text-gray-500">Add a product to begin this order.</p>}</div>
+            <div className="mt-3 space-y-2">{cartItems.length ? cartItems.map(({ product, variant, quantity }) => <div key={variant.id} className="flex items-center gap-3 rounded-lg border border-gray-100 p-3"><div className="min-w-0 flex-1"><strong className="block truncate text-xs font-semibold text-gray-800">{product.name}</strong><small className="text-[10px] text-gray-500">{variant.name} · {money(Number(variant.price))}</small></div><div className="flex items-center gap-1"><button type="button" aria-label={`Decrease ${product.name}`} onClick={() => setQuantity(variant.id, quantity - 1)} className="grid size-7 place-items-center rounded border border-gray-200"><Minus size={12}/></button><span className="w-6 text-center text-xs font-bold">{quantity}</span><button type="button" aria-label={`Increase ${product.name}`} onClick={() => setQuantity(variant.id, Math.min(variant.stockQty, quantity + 1))} disabled={quantity >= variant.stockQty} className="grid size-7 place-items-center rounded border border-gray-200 disabled:opacity-40"><Plus size={12}/></button><button type="button" aria-label={`Remove ${product.name}`} onClick={() => void removeItem(variant)} className="ml-1 grid size-7 place-items-center rounded text-red-600 hover:bg-red-50"><Trash2 size={13}/></button></div><strong className="w-20 text-right text-xs">{money(Number(variant.price) * quantity)}</strong></div>) : <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-xs text-gray-500">Add a product to begin this order.</p>}</div>
           </section>
 
           <section className="mt-5 space-y-3 border-t border-gray-100 pt-4"><h3 className="text-sm font-bold text-gray-900">Customer and fulfillment</h3>

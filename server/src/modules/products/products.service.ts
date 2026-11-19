@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { UpsertARProductAsset } from './dto/ar-product-asset.schemas.js';
+import type { BrandInput } from './dto/brand-input.schema.js';
 import type {
   CreateProduct,
   CreateProductVariant,
@@ -306,8 +307,41 @@ export class ProductsService {
     return this.db.brand.findMany({
       where: { deletedAt: null },
       orderBy: [{ name: 'asc' }],
-      select: { id: true, name: true, slug: true, isPublished: true },
+      include: { _count: { select: { products: { where: { deletedAt: null } } } } },
     });
+  }
+
+  async createAdminBrand(input: BrandInput) {
+    try {
+      const brand = await this.db.brand.create({ data: input, include: { _count: { select: { products: true } } } });
+      return { ...brand, productCount: brand._count.products };
+    } catch (error) {
+      if (this.isUniqueViolation(error)) throw new ConflictException('A brand with this name or slug already exists.');
+      throw error;
+    }
+  }
+
+  async updateAdminBrand(id: string, input: BrandInput) {
+    const current = await this.db.brand.findFirst({ where: { id, deletedAt: null } });
+    if (!current) throw new NotFoundException('Brand not found.');
+    try {
+      const brand = await this.db.brand.update({ where: { id }, data: input, include: { _count: { select: { products: { where: { deletedAt: null } } } } } });
+      return { ...brand, productCount: brand._count.products };
+    } catch (error) {
+      if (this.isUniqueViolation(error)) throw new ConflictException('A brand with this name or slug already exists.');
+      throw error;
+    }
+  }
+
+  async deleteAdminBrand(id: string) {
+    const brand = await this.db.brand.findFirst({ where: { id, deletedAt: null } });
+    if (!brand) throw new NotFoundException('Brand not found.');
+    await this.db.brand.update({ where: { id }, data: { deletedAt: new Date(), isPublished: false } });
+    return { id, deleted: true };
+  }
+
+  private isUniqueViolation(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 
   async getProduct(id: string) {

@@ -3,6 +3,7 @@
 import { Check, Plus, Trash2 } from "lucide-react";
 import type { ProductVariantInput, StockStatus, VariantStatus } from "@/features/products/types";
 import type { Attribute } from "@/features/attributes/types";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { ProductSpecificationEditor } from "./ProductSpecificationEditor";
 import { SelectField, TextAreaField, TextField, ToggleField } from "./ProductFormFields";
 
@@ -11,14 +12,20 @@ export type VariantDraft = ProductVariantInput & { id?: string };
 export function ProductVariantsStep({ variants, attributes, setVariants }: { variants: VariantDraft[]; attributes: Attribute[]; setVariants: (update: (current: VariantDraft[]) => VariantDraft[]) => void }) {
   const update = (index: number, patch: Partial<VariantDraft>) => setVariants((current) => current.map((variant, itemIndex) => itemIndex === index ? { ...variant, ...patch } : variant));
   const add = () => setVariants((current) => [...current, { name: "", slug: "", sku: "", price: 0, status: "draft", sortOrder: current.length, isDefault: current.length === 0, stockQty: 0, lowStockAlertQty: 5, stockStatus: "IN_STOCK", isOnSale: false, requiresWhiteGlove: false, features: [], variantOptions: [], media: [] }]);
-  const remove = (index: number) => setVariants((current) => current.filter((_, itemIndex) => index !== itemIndex).map((variant, itemIndex) => ({ ...variant, sortOrder: itemIndex, isDefault: itemIndex === 0 && current[index]?.isDefault ? true : variant.isDefault })));
+  const remove = async (variant: VariantDraft, index: number) => {
+    const name = variant.name.trim() || `variant ${index + 1}`;
+    if (!await confirmAdminAction(`Remove ${name}?`, "The variant will be removed when you save the product.")) return;
+    setVariants((current) => current.filter((item) => item !== variant).map((item, itemIndex) => ({
+      ...item, sortOrder: itemIndex, isDefault: itemIndex === 0 && variant.isDefault ? true : item.isDefault,
+    })));
+  };
   const setDefault = (index: number) => setVariants((current) => current.map((variant, itemIndex) => ({ ...variant, isDefault: itemIndex === index })));
 
   return <section className="overflow-hidden rounded-2xl border border-brand/10 bg-white">
     <div className="flex flex-col gap-3 border-b border-brand/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-ink">Variants</h2><p className="mt-1 text-xs text-muted">Set price, SKU, stock, and order for each sellable option.</p></div><button type="button" onClick={add} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand-dark"><Plus size={15} /> Add variant</button></div>
     <div className="space-y-4 p-5">
       {variants.map((variant, index) => <article key={variant.id ?? `new-${index}`} className="overflow-hidden rounded-xl border border-gray-200">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/80 px-4 py-3"><div><p className="text-sm font-semibold text-gray-800">{variant.name || `Variant ${index + 1}`}</p><p className="mt-0.5 text-xs text-gray-500">{variant.sku || "SKU not set"}</p></div><div className="flex gap-2"><button type="button" onClick={() => setDefault(index)} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${variant.isDefault ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600 hover:border-brand/30 hover:text-brand"}`}><Check size={13} />{variant.isDefault ? "Default" : "Set default"}</button><button type="button" onClick={() => remove(index)} aria-label={`Remove ${variant.name || `variant ${index + 1}`}`} className="rounded-lg border border-red-100 p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={14} /></button></div></div>
+        <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/80 px-4 py-3"><div><p className="text-sm font-semibold text-gray-800">{variant.name || `Variant ${index + 1}`}</p><p className="mt-0.5 text-xs text-gray-500">{variant.sku || "SKU not set"}</p></div><div className="flex gap-2"><button type="button" onClick={() => setDefault(index)} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${variant.isDefault ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600 hover:border-brand/30 hover:text-brand"}`}><Check size={13} />{variant.isDefault ? "Default" : "Set default"}</button><button type="button" onClick={() => void remove(variant, index)} aria-label={`Remove ${variant.name || `variant ${index + 1}`}`} className="rounded-lg border border-red-100 p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={14} /></button></div></div>
         <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
           <TextField label="Variant name" value={variant.name} onChange={(next) => update(index, { name: next })} placeholder="e.g. Natural oak" required />
           <TextField label="Slug" value={variant.slug ?? ""} onChange={(next) => update(index, { slug: next })} placeholder="Auto-generated if blank" />

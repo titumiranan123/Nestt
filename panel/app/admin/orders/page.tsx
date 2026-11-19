@@ -10,7 +10,7 @@ import { OrdersFilters } from "@/components/admin/orders/OrdersFilters";
 import { OrdersHeader } from "@/components/admin/orders/OrdersHeader";
 import { OrdersTable } from "@/components/admin/orders/OrdersTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
-import { ordersApi } from "@/features/orders/api";
+import { orderQueries } from "@/features/orders/hooks";
 import type { OrderStatus, PaymentStatus } from "@/features/orders/types";
 import { usePermission } from "@/hooks/use-permission";
 import { getErrorMessage } from "@/lib/api/errors";
@@ -27,10 +27,13 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const searchTerm = useDeferredValue(search.trim());
-  const orders = useQuery({
-    queryKey: ["admin", "orders", page, pageSize, status, payment, searchTerm],
-    queryFn: () => ordersApi.list({ page, pageSize, ...(status ? { status: status as OrderStatus } : {}), ...(payment ? { paymentStatus: payment as PaymentStatus } : {}), ...(searchTerm ? { search: searchTerm } : {}) }),
-  });
+  const orders = useQuery(orderQueries.list({
+    page,
+    pageSize,
+    status: status ? status as OrderStatus : undefined,
+    paymentStatus: payment ? payment as PaymentStatus : undefined,
+    search: searchTerm || undefined,
+  }));
 
   const exportOrders = () => {
     const header = ["Order ID", "Customer", "Phone", "Amount", "Status", "Payment", "Created at"];

@@ -15,7 +15,12 @@ export class ApiError extends Error {
 }
 
 export function getErrorMessage(error: unknown, fallback = "Something went wrong. Please try again."): string {
-  if (error instanceof ApiError) return error.message;
+  if (error instanceof ApiError) {
+    const validationMessage = !error.message || error.message === "Invalid request body"
+      ? Object.values(error.fieldErrors ?? {})[0]?.[0]
+      : undefined;
+    return validationMessage || error.message || fallback;
+  }
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }

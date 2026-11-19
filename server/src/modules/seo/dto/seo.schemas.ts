@@ -9,7 +9,7 @@ export const createSeoMetaSchema = z.object({
   metaDescription: z.string().trim().min(1),
   metaKeywords: optionalText(2000),
   canonicalUrl: z
-    .union([z.string().trim().url().max(255), z.literal('')])
+    .union([z.url({ protocol: /^https?$/ }).trim().max(255), z.literal('')])
     .optional()
     .nullable(),
   metaRobots: optionalText(50),

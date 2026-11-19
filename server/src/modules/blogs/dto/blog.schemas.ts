@@ -76,13 +76,15 @@ export const footerSettingSchema = z.object({
   shortDescription: z.string().trim().min(1).max(2000),
 });
 
+export const policySettingKeys = [
+  'policy_refund',
+  'policy_privacy',
+  'policy_terms',
+  'policy_shipping',
+] as const;
+
 export const policySettingSchema = z.object({
-  key: z.enum([
-    'policy_refund',
-    'policy_privacy',
-    'policy_terms',
-    'policy_shipping',
-  ]),
+  key: z.enum(policySettingKeys),
   value: z.string().trim().min(1).max(100_000),
 });
 

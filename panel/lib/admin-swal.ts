@@ -17,18 +17,20 @@ const nesttSwalTheme = {
 };
 
 export function showAdminNotice(title: string, text: string, icon: SweetAlertIcon = "info") {
-  return Swal.fire({ ...nesttSwalTheme, icon, title, text });
+  return Swal.fire({ ...nesttSwalTheme, icon, titleText: title, text });
 }
 
 export async function confirmAdminAction(title: string, text: string) {
   const result = await Swal.fire({
     ...nesttSwalTheme,
     icon: "warning",
-    title,
+    titleText: title,
     text,
     showCancelButton: true,
     confirmButtonText: "Continue",
     cancelButtonText: "Cancel",
+    focusCancel: true,
+    keydownListenerCapture: true,
     reverseButtons: true,
   });
   return result.isConfirmed;

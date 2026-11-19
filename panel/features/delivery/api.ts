@@ -35,17 +35,21 @@ export type DeliveryZoneConfig = {
   isActive: boolean;
 };
 
-export type DeliveryAreaInput = {
-  division: string;
-  district: string;
-  thana: string;
-  deliveryZone: DeliveryZone;
-  shippingFee: string | null;
-  isDeliverable: boolean;
-  freeDeliveryAbove: string | null;
+export type DeliveryLocationInput =
+  | { type: "division"; id?: string; data: { name: string } }
+  | { type: "district"; id?: string; data: { name: string; divisionId: string } }
+  | { type: "thana"; id?: string; data: Omit<DeliveryThana, "id"> };
+
+type DeliveryLocationChange = { type: DeliveryLocationInput["type"]; id: string };
+
+export type BulkDeliveryUpdate = {
+  thanaIds: string[];
+  deliveryZone?: DeliveryZone;
+  isDeliverable?: boolean;
 };
 
-export type UpdateDeliveryAreaInput = Omit<DeliveryAreaInput, "division" | "district">;
+const deliveryPath = "/admin/delivery";
+const locationPaths = { division: "divisions", district: "districts", thana: "thanas" };
 
 const json = (method: string, body: unknown) => ({
   method,
@@ -54,10 +58,21 @@ const json = (method: string, body: unknown) => ({
 });
 
 export const deliveryApi = {
-  listAreas: () => apiClient<DeliveryDivision[]>("/admin/orders/delivery-areas"),
-  listZones: () => apiClient<DeliveryZoneConfig[]>("/admin/orders/delivery-zones"),
-  createArea: (input: DeliveryAreaInput) => apiClient<DeliveryThana>("/admin/orders/delivery-areas", json("PUT", input)),
-  updateArea: (id: string, input: UpdateDeliveryAreaInput) => apiClient<DeliveryThana>(`/admin/orders/delivery-areas/${id}`, json("PATCH", input)),
-  removeArea: (id: string) => apiClient<{ id: string; deleted: boolean }>(`/admin/orders/delivery-areas/${id}`, { method: "DELETE" }),
-  saveZone: (input: DeliveryZoneConfig) => apiClient<DeliveryZoneConfig>("/admin/orders/delivery-zones", json("PUT", input)),
+  listAreas: (signal?: AbortSignal) => apiClient<DeliveryDivision[]>("/admin/orders/delivery-areas", { signal }),
+  listManagedAreas: (signal?: AbortSignal) => apiClient<DeliveryDivision[]>(`${deliveryPath}/areas`, { signal }),
+  listZones: (signal?: AbortSignal) => apiClient<DeliveryZoneConfig[]>(`${deliveryPath}/zone-configs`, { signal }),
+  saveZone: (input: DeliveryZoneConfig) => apiClient<DeliveryZoneConfig>(`${deliveryPath}/zone-configs`, json("PUT", input)),
+  saveLocation: ({ type, id, data }: DeliveryLocationInput) => apiClient<unknown>(
+    `${deliveryPath}/${locationPaths[type]}${id ? `/${id}` : ""}`,
+    json(id ? "PATCH" : "POST", data),
+  ),
+  removeLocation: ({ type, id }: DeliveryLocationChange) => apiClient<{ id: string; deleted: boolean }>(
+    `${deliveryPath}/${locationPaths[type]}/${id}`, { method: "DELETE" },
+  ),
+  setDeliverability: (id: string, isDeliverable: boolean) => apiClient<DeliveryThana>(
+    `${deliveryPath}/thanas/${id}`, json("PATCH", { isDeliverable }),
+  ),
+  bulkUpdate: (input: BulkDeliveryUpdate) => apiClient<{ updatedCount: number }>(
+    `${deliveryPath}/thanas/bulk`, json("PATCH", input),
+  ),
 };

@@ -34,6 +34,19 @@ export class AccessControlController {
     );
   }
 
+  @Get(':role/audit')
+  @Roles(RoleEnum.ADMIN, RoleEnum.SUPER_ADMIN)
+  audit(
+    @Param('role', new ParseEnumPipe(RoleEnum)) role: RoleEnum,
+    @Req() request: AuthRequest,
+  ) {
+    return this.accessControl.listRoleAudit(
+      role,
+      request.authUserId,
+      request.authUserRole,
+    );
+  }
+
   @Put(':role/permissions')
   @HttpCode(HttpStatus.OK)
   @Roles(RoleEnum.SUPER_ADMIN)

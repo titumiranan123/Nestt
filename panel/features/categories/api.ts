@@ -2,8 +2,8 @@ import { apiClient } from "@/lib/api/client";
 import type { Category, CategoryInput } from "./types";
 
 export const categoriesApi = {
-  list: () => apiClient<Category[]>("/admin/categories"),
-  get: (id: string) => apiClient<Category>(`/admin/categories/${id}`),
+  list: (signal?: AbortSignal) => apiClient<Category[]>("/admin/categories", { signal }),
+  get: (id: string, signal?: AbortSignal) => apiClient<Category>(`/admin/categories/${id}`, { signal }),
   create: (input: CategoryInput) => apiClient<Category>("/admin/categories", {
     method: "POST",
     body: JSON.stringify(input),

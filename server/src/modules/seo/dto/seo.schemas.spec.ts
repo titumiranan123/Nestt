@@ -33,6 +33,10 @@ describe('SEO request schemas', () => {
         canonicalUrl: 'not-a-url',
       }).success,
     ).toBe(false);
+    expect(
+      updateSeoMetaSchema.safeParse({ canonicalUrl: 'ftp://example.com/page' })
+        .success,
+    ).toBe(false);
     expect(siteContentSchema.safeParse({ content: '  ' }).success).toBe(false);
   });
 

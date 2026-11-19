@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import type { ProductSpecificationInput, SpecificationItemType } from "@/features/products/types";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { SelectField, TextField } from "./ProductFormFields";
 
 const emptySpecification = (): ProductSpecificationInput => ({ specs: [] });
@@ -24,6 +25,12 @@ export function ProductSpecificationEditor({
       ...specification,
       specs: specification.specs.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
     });
+  };
+  const removeItem = async (index: number) => {
+    const name = specification.specs[index].label.trim() || `specification ${index + 1}`;
+    if (!await confirmAdminAction(`Remove ${name}?`, "This specification will be removed when you save the product.")) return;
+    const specs = specification.specs.filter((_, itemIndex) => itemIndex !== index).map((item, sortOrder) => ({ ...item, sortOrder }));
+    onChange({ ...specification, specs });
   };
 
   return (
@@ -57,7 +64,7 @@ export function ProductSpecificationEditor({
               <div className="flex items-end justify-end">
                 <button
                   type="button"
-                  onClick={() => onChange({ ...specification, specs: specification.specs.filter((_, itemIndex) => itemIndex !== index).map((spec, itemIndex) => ({ ...spec, sortOrder: itemIndex })) })}
+                  onClick={() => void removeItem(index)}
                   aria-label={`Remove specification ${item.label || index + 1}`}
                   className="mb-0.5 rounded-lg border border-red-100 p-2 text-red-500 hover:bg-red-50"
                 >

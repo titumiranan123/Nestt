@@ -8,10 +8,10 @@ import { CatalogHeader } from "@/components/admin/catalog/CatalogHeader";
 import CatalogFilters from "@/components/admin/catalog/CatalogFilters";
 import CatalogPagination from "@/components/admin/catalog/CatalogPagination";
 import CatalogTable from "@/components/admin/catalog/CatalogTable";
-import { confirmAdminAction, showAdminNotice } from "@/lib/admin-swal";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { getErrorMessage } from "@/lib/api/errors";
 import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
-import { attributesApi } from "@/features/attributes/api";
+import { attributeQueries, useAttributeActions } from "@/features/attributes/hooks";
 import type { Attribute, AttributeInput, AttributeOptionInput } from "@/features/attributes/types";
 import type { CatalogRecord } from "@/lib/catalog-demo-data";
 
@@ -49,7 +49,8 @@ function toOptionInput(option: OptionDraft, sortOrder: number): AttributeOptionI
 
 export default function AttributeCatalogManager() {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: ["admin", "attributes"], queryFn: attributesApi.list });
+  const query = useQuery(attributeQueries.list);
+  const actions = useAttributeActions();
   const attributes = query.data ?? [];
   const rows = useMemo(() => attributes.map(toRecord), [attributes]);
   const [search, setSearch] = useState("");
@@ -59,10 +60,11 @@ export default function AttributeCatalogManager() {
   const [editing, setEditing] = useState<Attribute | null>(null);
   const [draft, setDraft] = useState<AttributeDraft>(emptyDraft);
   const [options, setOptions] = useState<OptionDraft[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [actionError, setActionError] = useState("");
+  const isSaving = actions.save.isPending;
+  const busy = isSaving || actions.remove.isPending || actions.publish.isPending;
   const pageSize = 10;
 
   const filtered = useMemo(() => rows.filter((row) => {
@@ -86,7 +88,7 @@ export default function AttributeCatalogManager() {
     setActionError("");
     setIsLoadingEdit(true);
     try {
-      const attribute = await attributesApi.get(row.id);
+      const attribute = await queryClient.fetchQuery(attributeQueries.detail(row.id));
       setEditing(attribute);
       setDraft({ name: attribute.name, slug: attribute.slug, sortOrder: attribute.sortOrder, isPublished: attribute.isPublished, showInFilter: attribute.showInFilter });
       setOptions(attribute.options.map((option) => ({ id: option.id, name: option.name, value: option.value ?? "", image: option.image ?? "", isPublished: option.isPublished })));
@@ -95,7 +97,6 @@ export default function AttributeCatalogManager() {
     } catch (error) {
       const message = getErrorMessage(error, "Could not load this attribute.");
       setActionError(message);
-      await showAdminNotice("Attribute could not be loaded", message, "error");
     } finally {
       setIsLoadingEdit(false);
     }
@@ -103,64 +104,47 @@ export default function AttributeCatalogManager() {
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIsSaving(true);
+    if (busy) return;
     setSubmitError("");
+    if (editing) {
+      const optionVisibilityChanged = editing.options.some((previous) =>
+        options.some((option) => option.id === previous.id && option.isPublished !== previous.isPublished),
+      );
+      if ((editing.isPublished !== draft.isPublished || optionVisibilityChanged) &&
+        !await confirmAdminAction(`Update visibility for ${editing.name}?`, "The new publishing status will be applied to this attribute and its options when saved.")) return;
+    }
+    const input: AttributeInput = {
+      name: draft.name.trim(),
+      slug: draft.slug.trim() || slugFrom(draft.name),
+      type: "DROPDOWN",
+      sortOrder: Number(draft.sortOrder),
+      isPublished: draft.isPublished,
+      showInFilter: draft.showInFilter,
+    };
     try {
-      const attributeInput: AttributeInput = {
-        name: draft.name.trim(),
-        slug: draft.slug.trim() || slugFrom(draft.name),
-        type: "DROPDOWN",
-        sortOrder: Number(draft.sortOrder),
-        isPublished: draft.isPublished,
-        showInFilter: draft.showInFilter,
-      };
-      const saved = editing
-        ? await attributesApi.update(editing.id, attributeInput)
-        : await attributesApi.create(attributeInput);
-
-      const currentIds = new Set(options.flatMap((option) => option.id ? [option.id] : []));
-      const removedOptions = (editing?.options ?? []).filter((option) => !currentIds.has(option.id));
-      for (const [index, option] of options.entries()) {
-        const optionInput = toOptionInput(option, index);
-        if (!optionInput.name) continue;
-        if (option.id) await attributesApi.updateOption(saved.id, option.id, optionInput);
-        else await attributesApi.createOption(saved.id, optionInput);
-      }
-      for (const option of removedOptions) await attributesApi.removeOption(saved.id, option.id);
-
-      await queryClient.invalidateQueries({ queryKey: ["admin", "attributes"] });
+      await actions.save.mutateAsync({ existing: editing, input, options: options.map((option, index) => ({ id: option.id, input: toOptionInput(option, index) })) });
       setDrawerOpen(false);
-      await showAdminNotice(`Attribute ${editing ? "updated" : "created"}`, `${saved.name} has been saved.`, "success");
     } catch (error) {
       setSubmitError(getErrorMessage(error, "The attribute could not be saved."));
-      await queryClient.invalidateQueries({ queryKey: ["admin", "attributes"] });
-    } finally {
-      setIsSaving(false);
     }
   };
 
+  const removeOption = async (index: number) => {
+    const option = options[index];
+    if (!option || isSaving || !await confirmAdminAction(`Remove ${option.name.trim() || `option ${index + 1}`}?`, "This option will be removed when you save the attribute.")) return;
+    setOptions((current) => current.filter((item) => item !== option));
+  };
   const remove = async (row: CatalogRecord) => {
-    if (!await confirmAdminAction(`Delete ${row.name}?`, "This attribute and its active option values will be removed from the catalog.")) return;
-    try {
-      await attributesApi.remove(row.id);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "attributes"] });
-      await showAdminNotice("Attribute deleted", `${row.name} has been removed.`, "success");
-    } catch (error) {
-      const message = getErrorMessage(error, "The attribute could not be deleted.");
-      setActionError(message);
-      await showAdminNotice("Attribute could not be deleted", message, "error");
-    }
+    if (busy || !await confirmAdminAction(`Delete ${row.name}?`, "This attribute and its active option values will be removed from the catalog.")) return;
+    setActionError("");
+    actions.remove.mutate(row.id);
   };
 
   const togglePublished = async (row: CatalogRecord) => {
-    try {
-      await attributesApi.update(row.id, { isPublished: !row.isPublished });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "attributes"] });
-    } catch (error) {
-      const message = getErrorMessage(error, "Attribute visibility could not be updated.");
-      setActionError(message);
-      await showAdminNotice("Attribute could not be updated", message, "error");
-    }
+    const isPublished = !row.isPublished;
+    if (busy || !await confirmAdminAction(`${isPublished ? "Publish" : "Unpublish"} ${row.name}?`, "This changes the storefront availability of the attribute.")) return;
+    setActionError("");
+    actions.publish.mutate({ id: row.id, isPublished });
   };
 
   const exportRows = () => {
@@ -170,7 +154,7 @@ export default function AttributeCatalogManager() {
   };
 
   if (query.isPending) return <AdminLoadingSkeleton kind="catalog" label="Loading attributes" />;
-  if (query.isError) return <section className="rounded-2xl border border-red-100 bg-white p-8 text-center"><h2 className="font-semibold text-gray-800">Could not load attributes</h2><p className="mt-1 text-sm text-red-700">{getErrorMessage(query.error)}</p><button type="button" onClick={() => void query.refetch()} className="mt-4 rounded-lg border border-brand/20 px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-soft">Try again</button></section>;
+  if (query.isError && !query.data) return <section className="rounded-2xl border border-red-100 bg-white p-8 text-center"><h2 className="font-semibold text-gray-800">Could not load attributes</h2><p className="mt-1 text-sm text-red-700">{getErrorMessage(query.error)}</p><button type="button" onClick={() => void query.refetch()} className="mt-4 rounded-lg border border-brand/20 px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-soft">Try again</button></section>;
 
   return <div className="animate-fade-up space-y-5">
     <CatalogHeader eyebrow="Attributes" title="Attributes" description="Manage reusable product attributes, option values, filter visibility, and storefront availability from the live catalog." singular="Attribute" canCreate onCreate={startCreate} onExport={exportRows}/>
@@ -193,7 +177,7 @@ export default function AttributeCatalogManager() {
             <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-bold text-gray-900">Option values</h3><p className="mt-1 text-xs text-gray-500">Add variant values; value and image are optional metadata.</p></div><button type="button" onClick={() => setOptions((current) => [...current, { name: "", value: "", image: "", isPublished: true }])} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-brand/20 px-3 text-xs font-semibold text-brand hover:bg-brand-soft"><Plus size={14}/> Add option</button></div>
             {!options.length && <p className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400">No option values yet.</p>}
             {options.map((option, index) => <div key={option.id ?? `new-${index}`} className="space-y-3 rounded-xl border border-gray-200 p-3">
-              <div className="flex items-center justify-between"><span className="text-xs font-semibold text-gray-600">Option {index + 1}</span><button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => setOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="grid size-8 place-items-center rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={15}/></button></div>
+              <div className="flex items-center justify-between"><span className="text-xs font-semibold text-gray-600">Option {index + 1}</span><button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => void removeOption(index)} className="grid size-8 place-items-center rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={15}/></button></div>
               <div><label className={labelClass} htmlFor={`attribute-option-name-${index}`}>Name <span className="text-red-500">*</span></label><input id={`attribute-option-name-${index}`} required className={inputClass} value={option.name} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} placeholder="e.g. Natural oak"/></div>
               <div><label className={labelClass} htmlFor={`attribute-option-value-${index}`}>Value</label><input id={`attribute-option-value-${index}`} className={inputClass} value={option.value} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} placeholder="Optional value or code"/></div>
               <div><label className={labelClass} htmlFor={`attribute-option-image-${index}`}>Image URL</label><input id={`attribute-option-image-${index}`} type="url" className={inputClass} value={option.image} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, image: event.target.value } : item))} placeholder="https://…"/></div>

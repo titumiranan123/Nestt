@@ -17,11 +17,21 @@ import { CartModule } from './modules/cart/cart.module.js';
 import { ARModule } from './modules/ar/ar.module.js';
 import { AddressesModule } from './modules/addresses/addresses.module.js';
 import { WishlistModule } from './modules/wishlist/wishlist.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
+import { UploadsModule } from './modules/uploads/uploads.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
+import { ReportsModule } from './modules/reports/reports.module.js';
+import { CouponsModule } from './modules/coupons/coupons.module.js';
+import { AdminToolsModule } from './modules/admin-tools/admin-tools.module.js';
 
 @Module({
   imports: [
     ConfigModule,
     DatabaseModule,
+    DashboardModule,
+    ReportsModule,
+    CouponsModule,
+    AdminToolsModule,
     AuthModule,
     CategoriesModule,
     OrdersModule,
@@ -32,6 +42,8 @@ import { WishlistModule } from './modules/wishlist/wishlist.module.js';
     BlogsModule,
     UsersModule,
     ProductsModule,
+    InventoryModule,
+    UploadsModule,
     CartModule,
     ARModule,
     AddressesModule,

@@ -1,6 +1,13 @@
-import type { DemoRole } from "@/lib/admin-operations-demo";
+import type { StaffRole } from "@/lib/rbac/roles";
 
-export type EditableRole = Exclude<DemoRole, "SUPER_ADMIN">;
+export type { StaffRole } from "@/lib/rbac/roles";
+export const roleLabels: Record<StaffRole, string> = {
+  SUPER_ADMIN: "Super Admin",
+  ADMIN: "Admin",
+  MANAGER: "Manager",
+  SUPPORT: "Support",
+};
+export type EditableRole = Exclude<StaffRole, "SUPER_ADMIN">;
 
 export type AccessPermission = {
   key: string;
@@ -10,7 +17,7 @@ export type AccessPermission = {
 };
 
 export type RolePermission = {
-  role: DemoRole;
+  role: StaffRole;
   permissions: string[];
 };
 
@@ -23,3 +30,5 @@ export type UpdateRolePermissionsInput = {
   role: EditableRole;
   permissions: string[];
 };
+
+export type RoleAuditEntry = { id: string; actorEmail: string; createdAt: string };

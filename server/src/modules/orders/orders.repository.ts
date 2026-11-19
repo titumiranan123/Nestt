@@ -29,6 +29,7 @@ import type {
 } from './dto/order.schemas.js';
 import { resolveDeliveryFee } from '../shipping/delivery-fee.resolver.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { allocateOrderCode } from './order-numbering.js';
 import {
   paginationOffset,
   paginationResult,
@@ -72,9 +73,9 @@ export function readGatewaySession(metadata: Prisma.JsonValue): GatewaySession |
 export class OrdersRepository {
   constructor(private readonly db: PrismaService) {}
 
-  async findCheckout(userId: string, orderCode: string, fingerprint?: string) {
-    const order = await this.db.order.findUnique({
-      where: { orderCode, userId },
+  async findCheckout(userId: string, checkoutKey: string, fingerprint?: string) {
+    const order = await this.db.order.findFirst({
+      where: { userId, OR: [{ checkoutKey: { is: { key: checkoutKey } } }, { orderCode: checkoutKey, checkoutKey: null }] },
       select: { id: true, orderCode: true, metadata: true },
     });
     if (!order) return null;
@@ -162,7 +163,7 @@ export class OrdersRepository {
     return parsed.number;
   }
 
-  createCheckout(userId: string, orderCode: string, input: CreateOrder, fingerprint?: string, verifiedPhone?: string) {
+  createCheckout(userId: string, fallbackCode: string, input: CreateOrder, fingerprint?: string, verifiedPhone?: string) {
     return this.db.$transaction(async (tx) => {
       const savedAddress = input.addressId && userId
         ? await tx.address.findFirst({ where: { id: input.addressId, userId } })
@@ -228,10 +229,14 @@ export class OrdersRepository {
         };
       }
 
+      const orderCode = await allocateOrderCode(tx, fallbackCode);
       return tx.order.create({
         data: {
           orderCode,
-          ...(fingerprint && { metadata: { checkoutFingerprint: fingerprint } }),
+          ...(fingerprint && {
+            checkoutKey: { create: { key: fallbackCode } },
+            metadata: { checkoutFingerprint: fingerprint },
+          }),
           userId,
           guestPhone: null,
           guestEmail: null,
@@ -408,7 +413,7 @@ export class OrdersRepository {
     });
   }
 
-  createAdmin(orderId: string, actorId: string, input: CreateAdminOrder) {
+  createAdmin(fallbackCode: string, actorId: string, input: CreateAdminOrder) {
     return this.db.$transaction(async (tx) => {
       const variants = await tx.productVariant.findMany({
         where: {
@@ -469,9 +474,10 @@ export class OrdersRepository {
           }
         : undefined;
 
+      const orderCode = await allocateOrderCode(tx, fallbackCode);
       return tx.order.create({
         data: {
-          orderCode: orderId,
+          orderCode,
           userId: null,
           addressId: null,
           shippingThanaId: thana?.id ?? null,
@@ -976,7 +982,13 @@ export class OrdersRepository {
 
     await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       UPDATE "product_variants" AS variant
-      SET "stockQty" = variant."stockQty" + reserved.quantity
+      SET "stockQty" = variant."stockQty" + reserved.quantity,
+          "stockStatus" = CASE
+            WHEN variant."stockStatus" = 'OUT_OF_STOCK' AND variant."stockQty" = 0 THEN
+              CASE WHEN reserved.quantity <= variant."lowStockAlertQty"
+                THEN 'LOW_STOCK'::"StockStatus" ELSE 'IN_STOCK'::"StockStatus" END
+            ELSE variant."stockStatus"
+          END
       FROM (VALUES ${Prisma.join(
         reservedItems.map(
           (item) =>

@@ -2,8 +2,8 @@ import { apiClient } from "@/lib/api/client";
 import type { Attribute, AttributeInput, AttributeOption, AttributeOptionInput } from "./types";
 
 export const attributesApi = {
-  list: () => apiClient<Attribute[]>("/admin/attributes"),
-  get: (id: string) => apiClient<Attribute>(`/admin/attributes/${id}`),
+  list: (signal?: AbortSignal) => apiClient<Attribute[]>("/admin/attributes", { signal }),
+  get: (id: string, signal?: AbortSignal) => apiClient<Attribute>(`/admin/attributes/${id}`, { signal }),
   create: (input: AttributeInput) => apiClient<Attribute>("/admin/attributes", {
     method: "POST",
     body: JSON.stringify(input),

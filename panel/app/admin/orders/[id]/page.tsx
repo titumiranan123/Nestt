@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, CreditCard, MapPin, Package, Phone, Printer, Save, ShieldAlert, Truck } from "lucide-react";
 import { OrderStatusPill } from "@/components/admin/orders/OrderStatusPill";
 import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
-import { ordersApi } from "@/features/orders/api";
-import type { OrderStatus } from "@/features/orders/types";
+import { orderQueries, useOrderActions } from "@/features/orders/hooks";
+import type { OrderStatus, PaymentActionStatus, ReturnActionStatus } from "@/features/orders/types";
 import { usePermission } from "@/hooks/use-permission";
 import { getErrorMessage } from "@/lib/api/errors";
-import { confirmAdminAction, showAdminNotice } from "@/lib/admin-swal";
+import { confirmAdminAction } from "@/lib/admin-swal";
 
 const card = "rounded-xl border border-gray-200 bg-white p-4 sm:p-5";
 const money = (value: string | number) => new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", maximumFractionDigits: 0 }).format(Number(value));
@@ -21,14 +21,9 @@ const transitions: Record<OrderStatus, OrderStatus[]> = { PENDING: ["CONFIRMED",
 export default function OrderDetailsPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const queryClient = useQueryClient();
   const canUpdate = usePermission("orders:update");
-  const queryKey = ["admin", "orders", id] as const;
-  const order = useQuery({ queryKey, queryFn: () => ordersApi.get(id), enabled: Boolean(id) });
-  const statusMutation = useMutation({ mutationFn: ({ status, note }: { status: OrderStatus; note?: string }) => ordersApi.updateStatus(id, status, note), onSuccess: async (data) => { queryClient.setQueryData(queryKey, data); await queryClient.invalidateQueries({ queryKey: ["admin", "orders"] }); } });
-  const paymentMutation = useMutation({ mutationFn: ({ status, reference }: { status: "PAID" | "FAILED"; reference?: string }) => ordersApi.updatePayment(id, status, reference), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey }); await queryClient.invalidateQueries({ queryKey: ["admin", "orders"] }); } });
-  const remarkMutation = useMutation({ mutationFn: ({ note, isInternal }: { note: string; isInternal: boolean }) => ordersApi.addRemark(id, note, isInternal), onSuccess: async () => { setRemark(""); await queryClient.invalidateQueries({ queryKey }); } });
-  const returnMutation = useMutation({ mutationFn: ({ returnId, status }: { returnId: string; status: "APPROVED" | "REJECTED" | "RECEIVED" }) => ordersApi.updateReturn(returnId, status), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey }); } });
+  const order = useQuery({ ...orderQueries.detail(id), enabled: Boolean(id) });
+  const { status: statusMutation, payment: paymentMutation, remark: remarkMutation, orderReturn: returnMutation } = useOrderActions(id);
   const [nextStatus, setNextStatus] = useState<OrderStatus | "">("");
   const [statusNote, setStatusNote] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
@@ -40,32 +35,25 @@ export default function OrderDetailsPage() {
   useEffect(() => { if (current) setNextStatus(allowedStatuses[0] ?? ""); }, [current?.status, current?.paymentStatus, allowedStatuses]);
 
   const changeStatus = async () => {
-    if (!nextStatus) return;
-    if (nextStatus === "CANCELLED" && !await confirmAdminAction(`Cancel ${current?.orderCode}?`, "Reserved stock will be returned to inventory.")) return;
-    try {
-      const saved = await statusMutation.mutateAsync({ status: nextStatus, note: statusNote.trim() || undefined });
-      setStatusNote("");
-      void showAdminNotice("Order status updated", `${saved.orderCode} is now ${readable(saved.status)}.`, "success");
-    } catch (error) {
-      void showAdminNotice("Could not update order status", getErrorMessage(error), "error");
-    }
+    if (!current || !canUpdate || !nextStatus || !allowedStatuses.includes(nextStatus) || statusMutation.isPending) return;
+    const cancelling = nextStatus === "CANCELLED";
+    const title = cancelling ? `Cancel ${current.orderCode}?` : `Mark ${current.orderCode} as ${readable(nextStatus).toLowerCase()}?`;
+    const text = cancelling ? "Reserved stock will be returned to inventory." : "The new status will appear in the order history.";
+    if (!await confirmAdminAction(title, text)) return;
+    statusMutation.mutate({ status: nextStatus, note: statusNote.trim() || undefined }, { onSuccess: () => setStatusNote("") });
   };
-  const markPayment = async (status: "PAID" | "FAILED") => {
-    try {
-      await paymentMutation.mutateAsync({ status, reference: paymentReference.trim() || undefined });
-      setPaymentReference("");
-      void showAdminNotice("Payment updated", `Payment marked ${readable(status).toLowerCase()}.`, "success");
-    } catch (error) {
-      void showAdminNotice("Could not update payment", getErrorMessage(error), "error");
-    }
+  const markPayment = async (status: PaymentActionStatus) => {
+    if (!current || !canUpdate || paymentMutation.isPending) return;
+    if (!await confirmAdminAction(`Mark payment as ${readable(status).toLowerCase()}?`, `This updates the payment record for ${current.orderCode}.`)) return;
+    paymentMutation.mutate({ status, reference: paymentReference.trim() || undefined }, { onSuccess: () => setPaymentReference("") });
   };
-  const saveRemark = async () => {
-    try {
-      await remarkMutation.mutateAsync({ note: remark.trim(), isInternal: internalRemark });
-      void showAdminNotice("Remark saved", "The order remark has been added.", "success");
-    } catch (error) {
-      void showAdminNotice("Could not save remark", getErrorMessage(error), "error");
-    }
+  const changeReturnStatus = async (returnId: string, status: ReturnActionStatus) => {
+    if (!current || !canUpdate || returnMutation.isPending) return;
+    if (!await confirmAdminAction(`Mark return as ${readable(status).toLowerCase()}?`, `This updates the return request for ${current.orderCode}.`)) return;
+    returnMutation.mutate({ returnId, status });
+  };
+  const saveRemark = () => {
+    remarkMutation.mutate({ note: remark.trim(), isInternal: internalRemark }, { onSuccess: () => setRemark("") });
   };
 
   if (order.isPending) return <AdminLoadingSkeleton kind="editor" label="Loading order details" />;
@@ -109,7 +97,7 @@ export default function OrderDetailsPage() {
             </div>
           </div>
         </section>
-        {Boolean(current.returns?.length) && <section className={card}><h2 className="font-bold text-gray-900">Return requests</h2><div className="mt-3 space-y-3">{current.returns?.map((request) => { const actions = request.status === "REQUESTED" ? ["APPROVED", "REJECTED"] as const : request.status === "APPROVED" ? ["RECEIVED", "REJECTED"] as const : []; return <article key={request.id} className="rounded-lg border border-gray-100 p-3"><p className="text-xs font-semibold text-gray-800">{request.item.productName} · {readable(request.status)}</p>{request.reason && <p className="mt-1 text-xs text-gray-500">{request.reason}</p>}<div className="mt-2 flex flex-wrap gap-2">{actions.map((status) => <button type="button" key={status} disabled={!canUpdate || returnMutation.isPending} onClick={() => returnMutation.mutate({ returnId: request.id, status })} className="rounded border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 disabled:opacity-50">{readable(status)}</button>)}</div></article>; })}</div>{returnMutation.isError && <p role="alert" className="mt-2 text-xs text-red-600">{getErrorMessage(returnMutation.error)}</p>}</section>}
+        {Boolean(current.returns?.length) && <section className={card}><h2 className="font-bold text-gray-900">Return requests</h2><div className="mt-3 space-y-3">{current.returns?.map((request) => { const actions = request.status === "REQUESTED" ? ["APPROVED", "REJECTED"] as const : request.status === "APPROVED" ? ["RECEIVED", "REJECTED"] as const : []; return <article key={request.id} className="rounded-lg border border-gray-100 p-3"><p className="text-xs font-semibold text-gray-800">{request.item.productName} · {readable(request.status)}</p>{request.reason && <p className="mt-1 text-xs text-gray-500">{request.reason}</p>}<div className="mt-2 flex flex-wrap gap-2">{actions.map((status) => <button type="button" key={status} disabled={!canUpdate || returnMutation.isPending} onClick={() => void changeReturnStatus(request.id, status)} className="rounded border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 disabled:opacity-50">{readable(status)}</button>)}</div></article>; })}</div>{returnMutation.isError && <p role="alert" className="mt-2 text-xs text-red-600">{getErrorMessage(returnMutation.error)}</p>}</section>}
       </aside>
     </div>
     <Link href="/admin/orders" className="inline-flex items-center gap-2 text-sm font-semibold text-brand"><ArrowLeft size={15}/>Back to orders</Link>

@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { productsApi } from "@/features/products/api";
+import { productQueries, useProductActions } from "@/features/products/hooks";
+import { categoryQueries } from "@/features/categories/hooks";
 import type { Product, ProductCareItemInput, ProductInput, ProductSpecificationInput, ProductVariantInput } from "@/features/products/types";
-import { attributesApi } from "@/features/attributes/api";
+import { attributeQueries } from "@/features/attributes/hooks";
 import type { Attribute } from "@/features/attributes/types";
 import { getErrorMessage } from "@/lib/api/errors";
 import { AdminLoadingSkeleton } from "@/components/admin/shared/AdminLoadingSkeleton";
-import { showAdminNotice } from "@/lib/admin-swal";
+import { confirmAdminAction } from "@/lib/admin-swal";
 import { ProductContentStep } from "./ProductContentStep";
 import { ProductDetailsStep } from "./ProductDetailsStep";
 import { ProductSeoAssemblyStep } from "./ProductSeoAssemblyStep";
@@ -49,17 +50,17 @@ function normalizeSpecification(value?: ProductSpecificationInput | null): Produ
 
 export default function ProductEditor({ productId }: { productId?: string }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const editMode = Boolean(productId);
   const [tab, setTab] = useState<TabId>("details");
   const [form, setForm] = useState<ProductInput>(emptyProduct);
   const [variants, setVariants] = useState<VariantDraft[]>([{ name: "", slug: "", sku: "", price: 0, status: "draft", sortOrder: 0, isDefault: true, stockQty: 0, lowStockAlertQty: 5, stockStatus: "IN_STOCK", isOnSale: false, requiresWhiteGlove: false, features: [] }]);
-  const [saving, setSaving] = useState(false);
+  const { save } = useProductActions();
+  const saving = save.isPending;
   const [errorMessage, setErrorMessage] = useState("");
-  const product = useQuery({ queryKey: ["admin", "products", productId], queryFn: () => productsApi.get(productId!), enabled: Boolean(productId) });
-  const categories = useQuery({ queryKey: ["admin", "categories"], queryFn: productsApi.categories });
-  const brands = useQuery({ queryKey: ["admin", "brands"], queryFn: productsApi.brands });
-  const attributes = useQuery({ queryKey: ["admin", "attributes"], queryFn: attributesApi.list });
+  const product = useQuery({ ...productQueries.detail(productId ?? ""), enabled: Boolean(productId) });
+  const categories = useQuery(categoryQueries.list);
+  const brands = useQuery(productQueries.brands);
+  const attributes = useQuery(attributeQueries.list);
 
   useEffect(() => {
     if (!product.data) return;
@@ -79,8 +80,18 @@ export default function ProductEditor({ productId }: { productId?: string }) {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSaving(true);
+    if (saving) return;
     setErrorMessage("");
+    const previousProduct = product.data;
+    if (previousProduct) {
+      const previousVariants = new Map(previousProduct.variants.map((variant) => [variant.id, variant]));
+      const variantStatusChanged = variants.some((variant) => {
+        const previous = variant.id ? previousVariants.get(variant.id) : undefined;
+        return previous && (previous.status !== variant.status || previous.stockStatus !== variant.stockStatus);
+      });
+      if ((previousProduct.status !== form.status || variantStatusChanged) &&
+        !await confirmAdminAction(`Update status for ${previousProduct.name}?`, "Saving will apply the new product or variant status to the catalog.")) return;
+    }
     try {
       const brandId = form.brandId?.trim() || null;
       const productInput: ProductInput = {
@@ -131,28 +142,16 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         media: (variant.media ?? []).filter((media) => media.url.trim()).map((media, mediaIndex) => ({ url: media.url.trim(), type: media.type ?? "product", alt: media.alt?.trim() || null, isPrimary: mediaIndex === 0, displayOrder: mediaIndex, videoUrl: media.videoUrl ?? null, videoThumbnailUrl: media.videoThumbnailUrl ?? null })),
       }));
 
-      let saved: Product;
-      if (!productId) {
-        saved = await productsApi.create({ ...productInput, variants: variantInputs.length ? variantInputs : undefined });
-      } else {
-        saved = await productsApi.update(productId, productInput);
-        const before = product.data?.variants ?? [];
-        const keepIds = new Set(variants.flatMap((variant) => variant.id ? [variant.id] : []));
-        await Promise.all([
-          ...before.filter((variant) => !keepIds.has(variant.id)).map((variant) => productsApi.removeVariant(productId, variant.id)),
-          ...variants.map((variant, index) => {
-            const input = variantInputs[index]!;
-            return variant.id ? productsApi.updateVariant(productId, variant.id, input) : productsApi.createVariant(productId, input);
-          }),
-        ]);
-      }
-      await queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
-      await showAdminNotice(editMode ? "Product updated" : "Product created", `${saved.name} has been saved.`, "success");
+      const retained = new Set(variants.map((variant) => variant.id));
+      const saved = await save.mutateAsync({
+        id: productId,
+        input: productInput,
+        variants: variantInputs.map((input, index) => ({ input, id: variants[index].id })),
+        removedVariantIds: (previousProduct?.variants ?? []).filter((variant) => !retained.has(variant.id)).map((variant) => variant.id),
+      });
       router.push(`/admin/products/${saved.id}`);
     } catch (error) {
-      if (productId) await product.refetch();
       setErrorMessage(getErrorMessage(error, "The product could not be saved."));
-      setSaving(false);
     }
   };
 
